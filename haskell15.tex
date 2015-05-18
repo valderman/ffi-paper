@@ -95,8 +95,9 @@ compilers; interoperability; web
 
 Interfacing with other languages is one of the more painful aspects of modern
 day Haskell development. Consider figure \ref{lst:bad-ffi}, taken from the
-standard libraries of GHC; a ``simple'' piece of code to retrieve the current
-time\ \cite{time}.
+standard libraries of GHC; a piece of code to retrieve the
+current time\ \cite{time}. A relatively simple task, yet its implementation is
+surprisingly complex.
 
 \begin{listingfloat}
 \begin{code}
@@ -126,7 +127,7 @@ getCTimeval = with (MkCTimeval 0 0) $ \ptval -> do
 \label{lst:bad-ffi}
 \end{listingfloat}
 
-This code snippet is more akin to thinly veiled C code than proper, readable
+This code snippet is more akin to thinly veiled C code than idiomatic, readable
 Haskell; an unfortunate reality of working with the standard foreign function
 interface. But is this really the best we can do?
 
@@ -135,8 +136,8 @@ FFI may be quite enough. However, Haskell does not only compile to
 traditional C-based architectures, but to higher level environments - most
 prominently JavaScript - as well. In writing this paper, we seek to liberate
 Haskell code targeting JavaScript and similar high level platforms from the
-shackles of the low level Foreign Function Interface used to interface
-Haskell with C since time immemorial.
+shackles of the low level Foreign Function Interface traditionally used to
+interface Haskell with C.
 
 The FFI prioritizes compatibility via a lowest common denominator language: C.
 To avoid making communications with our high level target platforms subject
@@ -181,7 +182,7 @@ Contrasting this with the standard FFI code from figure \ref{lst:bad-ffi}:
 
 \begin{itemize}
 \item
-  The low level C types are gone, replaced by a nice, descriptive record type,
+  The low level C types are gone, replaced by a more descriptive record type,
   and so is the \lstinline!peek!ing and \lstinline!poke!ing of pointers.
 \item
   The imported function arrives ``batteries included'', on equal footing with
@@ -247,8 +248,9 @@ code in the host language.
 Traditionally, Haskell programs have used the Foreign Function Interface
 extension\ \cite{ffi} to communicate with other languages. This works
 passably well in the world of native binary programs running on bare metal,
-where the C calling conventions have reigned unchallenged since time
-immemorial. The C language has no notion of higher level data structures or
+where the C calling conventions have become the de facto standard of foreign
+data interchange.
+The C language has no notion of higher level data structures or
 fancy data representation, making it the perfect lowest common denominator
 interlingua for language to language communication:
 there is no ambiguity or clash between different languages' built-in
@@ -295,7 +297,7 @@ cope with:
   Extra scaffolding is required at all call sites to marshal data to/from
   their respective C implementations. While this is usually solved
   by hiding the foreign imports themselves and exporting wrapper functions to
-  save the module's consumer from having to deal with these details, as done
+  save the module's consumer from having to deal with these details, as is done
   in this example, this still requires someone to write that extra
   boilerplate code.
 \item
@@ -1429,7 +1431,8 @@ a more generally applicable interface.
 \paragraph{GHCJS: JavaScriptFFI}
 The \emph{GHCJS} Haskell-to-JavaScript compiler\ \cite{ghcjs} utilizes the
 relatively recent \emph{JavaScriptFFI} GHC extension,
-which has been surprisingly rarely described outside a GHCJS context.
+which has unfortunately been rarely described outside a GHCJS context, to the
+point of being conspicuously absent from even the GHC documentation.
 Much like Fay, this extension parses and
 performs substitutions over imported host language code to make imports
 slightly more flexible, allowing for importing arbitrary expressions rather
