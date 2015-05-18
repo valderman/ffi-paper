@@ -213,7 +213,7 @@ being very much in fashion, but applies equally well to the aforementioned
 .NET and JVM platforms.
 
 \paragraph{Our Contribution}\label{sec:contrib}
-In section \ref{sec:haste-foreign}, we present a novel interface for a hosted
+In section \ref{sec:interface}, we present a novel interface for a hosted
 Haskell dialect to interface with its host language at a high level of
 abstraction, and describe its implementation for the Haste compiler.
 \ \cite{haste}
@@ -314,7 +314,7 @@ When working in a hosted Haskell dialect, we ought to be able to do better
 than this: bound no more by the fetters of C, hosted Haskell should be able
 to interface with its host language in a less verbose and more flexible manner.
 
-\section{A New Way}\label{sec:haste-foreign}
+\section{A New Way}\label{sec:interface}
 Our interface is based on the idea that the entirety of an interaction with the
 host environment need not be an atomic operation. Rather, we attempt to break
 foreign calls down into its constituent parts: marshalling arguments into the
@@ -323,7 +323,7 @@ results back into Haskell. We implement these parts in Haskell itself to the
 extent possible, only reaching out to the host environment when it is clear
 that a task is impossible to perform within the confines of Haskell.
 
-\subsection{Crossing the Rift}\label{sec:interface}
+\subsection{Crossing the Rift}
 As the main purpose of a foreign interface is to shovel data back and
 forth through a rift spanning two separate programming worlds, it makes sense
 to begin the design of any such interface with one central question:
@@ -722,23 +722,25 @@ evaluating code at runtime as well, most notably the JVM.
 
 Noting that virtually every sane use of our interface evaluates a \emph{static}
 string, a solution presents itself: whenever the \lstinline!eval! function
-is applied to a statically known string, do not generate the function call,
-but splice the contents of the string verbatim into the output code instead.
+is applied to a statically known string, instead of generating a function call,
+the compiler splices the contents of the string verbatim into the output code
+instead.
 
 This solution has the advantage of eliminating the code analysis obstacle
-provided by \lstinline!eval! for the case when our target code is statically
+provided by \lstinline!eval! for the case when our imported code is statically
 known (which, as we noted before, is a basic sanity property of foreign
 imports), while preserving our interface's simplicity of implementation.
 
-By combining this approach with the method for restricting our interface to
-statically known strings described in section \ref{sec:safe_host},
-we guarantee the complete absence of \lstinline!eval! from the generated host
-code, removing the restriction that our host language supports dynamic code
-evaluation at runtime, notably making our interface implementable on
-recent versions of the Java Virtual Machine.
-
-\section{Extending the interface}
+\section{Putting our interface to use}
 \label{sec:extensions}
+While the interface described in sections \ref{sec:interface} and
+\ref{sec:optimizations} represents a clear raising of the abstraction layer
+over the vanilla foreign function interface, it is still lacking some
+desirable high level functionality: marshalling of arbitrary functions and
+generic data types.
+
+In this section we demonstrate the flexibility of our interface by implementing
+this functionality on top of our basic interface.
 
 \subsection{Dynamic function marshalling}
 \label{sec:marshalling-functions}
@@ -934,7 +936,25 @@ but we can prevent this instance from leaking to \lstinline!ToAny! where it
 would be unreasonably broad by replacing our \lstinline!ToAny! function
 instance with two slightly more specific ones.
 
+Figure \ref{lst:export-final} gives our final implementation of dynamic
+function exports.
+Looking at this code we also see why the use of closed type families are
+necessary: the open type families originally introduced by Chakravarty et al
+in\ \cite{typefamilies} do not admit the overlapping type equations required
+to make pure functions an instance of \lstinline!Exportable!.
+
+\begin{listingfloat}
 \begin{code}
+  import Foreign.StablePtr
+  import System.IO.Unsafe
+
+  foreign import ccall
+    hsfun_to_host' :: StablePtr a -> HostFun
+
+  hsfun_to_host :: Exportable f => f -> IO HostFun
+  hsfun_to_host f =
+    hsfun_to_host' `fmap` newStablePtr (mkHostFun f)
+
   type family Host a where
     type Host (a -> b) = a -> Host b
     type Host (IO a)   = IO HostAny
@@ -951,13 +971,11 @@ instance with two slightly more specific ones.
     {-# NOINLINE toAny #-}
     toAny = unsafePerformIO . hsfun_to_host
 \end{code}
+\caption{Dynamic function exports implemented on top of our interface}
+\label{lst:export-final}
+\end{listingfloat}
 
-Here we also see why the use of closed type families are necessary:
-the open type families originally introduced by Chakravarty et al
-in\ \cite{typefamilies} do not admit the overlapping type equations required
-to make pure functions an instance of \lstinline!Exportable!.
-
-\subsection{Exporting functions}
+\subsection{Static function exports}
 \label{sec:exports}
 Very rarely are users prepared to abandon person-decades of legacy code;
 to reach these users, the ability to expose Haskell functionality to the host
@@ -973,8 +991,9 @@ While this may seem like a silly workaround, this is how JavaScript programs
 commonly ``link against'' third party libraries.
 
 Using the function marshalling implemented in section
-\ref{sec:marshalling-functions}, implementing \lstinline!export! becomes
-quite simple.
+\ref{sec:marshalling-functions}, implementing \lstinline!export! becomes a
+mere matter of passing a function to the host language, which then
+arranges for the function to be available in a known, appropriate location.
 
 \begin{code}
   export :: Exportable f => String -> f -> IO ()
@@ -1167,7 +1186,6 @@ The results for each benchmark are given in table \ref{tbl:performance} as
 the ratio of the run time for our library over the run time for the vanilla
 FFI.
 
-
 \begin{table}
   \renewcommand{\arraystretch}{1.5}
   \begin{center}
@@ -1352,8 +1370,8 @@ imports in a similar way, and indeed we could.
 However, ``could'' is not necessarily isomorphic to ``should''.
 Foreign functions do, after all, come from the unregulated, disorderly world
 outside the confines of the type checker. Haskell's type system does not
-allow us to mix pure functions with ``probably kind of pure, maybe''
-functions, and for good reason - it is not clear that we should lift this
+allow us to mix pure functions with possibly impure ones, and for good
+reason. It is not clear that we should lift this
 restriction just because a function is defined in another language.
 
 Moreover, as explained in section \ref{sec:interface}, marshalling inbound
@@ -1484,11 +1502,23 @@ well. A price in implementation effort that may not always be worth the extra
 expressive power it buys.
 
 \subsection{Future work}
+By combining two optimizations given in section \ref{sec:optimizations},
+the restriction of our \lstinline!ffi_safe! function to only accept statically
+known strings and the elimination of calls to \lstinline!eval! for statically
+known strings, it is possible to lift the restriction that our host language
+support dynamic code evaluation: if all foreign imports are statically known,
+and we are able to eliminate \lstinline!eval! calls for all statically known
+functions, it follows that we are able to eliminate all \lstinline!eval!
+calls.
+While the actual implementation of this idea has yet to be worked out,
+guaranteeing the complete absence of \lstinline!eval! from the generated host
+code would remove the restriction that our host language supports dynamic code
+evaluation at runtime, notably making our interface implementable on
+recent versions of the Java Virtual Machine.
+
 While the interface presented in this paper is implementable across a wide
-range of host environments, particularly with the modification described in
-section \ref{sec:inline-eval} to lift the restriction of the host language
-supporting a dynamic evaluation construct, we have yet to implement this
-interface for a non-JavaScript environment.
+range of host environments, we have yet to implement this interface for a
+non-JavaScript environment.
 Implementing this interface for the Java Virtual Machine, with the
 prerequisite Haskell-to-JVM compiler, would lend further weight to our
 assertion that this interface is both both useful and broadly implementable.
