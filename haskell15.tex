@@ -169,9 +169,9 @@ to write high level code like that in figure \ref{lst:good-ffi}.
 
   getCurrentTime :: IO UTCTime
   getCurrentTime =
-    host "() => {var now = window.performance.now();\\
-                \\return {msecs: Math.trunc(now),\\
-                \\        usecs: Math.trunc(now*1000)};}"
+  host "() => {var ms = new Date().getTime();
+              \\return {secs:  Math.trunc(ms/1000),\\
+              \\        msecs: ms % 1000};}"
 \end{code}
 \caption{The desired state of foreign imports}
 \label{lst:good-ffi}
