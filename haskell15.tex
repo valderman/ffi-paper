@@ -616,11 +616,16 @@ function.
 By the power of \emph{rewrite rules}\ \cite{rewriterules}, we can
 eliminate this pointless work in most cases by specializing the
 \lstinline!host! function's base case instance for different numbers of
-arguments. As shown in figure \ref{lst:specialization}, in addition to the
-general \lstinline!apply! function we define a series of \lstinline!apply0!,
-\lstinline!apply1!, etc. functions, one for each arity we want to optimize
-function application for. The actual specialization is then a mere matter of
+arguments.
+In addition to the general \lstinline!apply! function we define a series of
+\lstinline!apply0!, \lstinline!apply1!, etc. functions, one for each arity
+we want to optimize function application for.
+The actual specialization is then a matter of
 rewriting \lstinline!host! calls to use the appropriate application function.
+
+Figure \ref{lst:specialization} gives a new implementation of the base case
+of the \lstinline!Import! class which includes this optimization, replacing
+the one given in \ref{sec:interface}.
 
 \begin{listingfloat}
 \begin{code}
@@ -676,17 +681,24 @@ first incarnation described in\ \cite{cloudhaskell}, introduces the
 expression which is not known at compile time into a \lstinline!StaticPtr!
 yields a compiler error.
 
-Creating a \lstinline!safe_host! function which can not be used to execute
-user-provided code becomes quite easy using this extension, at the cost of
-slightly more inconvenient import syntax:
+Implementing a \lstinline!safe_host! function which can not be used to execute
+user-provided code becomes quite easy using this extension and the basic
+\lstinline!host! function described in section \ref{sec:interface},
+at the cost of slightly more inconvenient import syntax:
 
 \begin{code}
   safe_host :: Import f => StaticPtr HostString -> f
   safe_host = host . deRefStaticPtr
 
-  safe_alert :: String -> IO ()
-  safe_alert = safe_host $ static "alert"
+  safe_hello :: IO ()
+  safe_hello = safe_host $
+    static "() => alert('Hello, world!')"
 \end{code}
+
+Note that unlike the basic interface, the \lstinline!safe_host!
+function is currently \emph{not} included in our reference implementation,
+as the Haste compiler it builds on does not yet support this language
+extension.
 
 \subsection{Eliminating \lstinline!eval!}
 \label{sec:inline-eval}
@@ -716,10 +728,6 @@ to be taken when writing code that is not visible as such to the minifier:
 code which is externally imported or, in our case, locked away inside a string
 for later evaluation.
 
-Finally, by eliminating all occurrences of \lstinline!eval!, we may
-extend the usefulness of our interface to platforms which do not support
-evaluating code at runtime as well, most notably the JVM.
-
 Noting that virtually every sane use of our interface evaluates a \emph{static}
 string, a solution presents itself: whenever the \lstinline!eval! function
 is applied to a statically known string, instead of generating a function call,
@@ -729,7 +737,10 @@ instead.
 This solution has the advantage of eliminating the code analysis obstacle
 provided by \lstinline!eval! for the case when our imported code is statically
 known (which, as we noted before, is a basic sanity property of foreign
-imports), while preserving our interface's simplicity of implementation.
+imports), while preserving our library's simplicity of implementation.
+However, it also has the \emph{dis}advantage of requiring modifications to the
+compiler in use, however slight, which increases the interface's overall
+complexity of implementation.
 
 \section{Putting our interface to use}
 \label{sec:extensions}
@@ -912,7 +923,8 @@ functions. There are two main obstacles to this:
   would accidentally add a \lstinline!ToAny! instance for
   \emph{any type at all}.
   Even worse, this instance is completely bogus for most types, always treating
-  its argument as a function to be converted into a host language function!
+  the argument to its \lstinline!toAny! implementation as a function to be
+  converted into a host language function!
 \end{itemize}
 
 We sidestep the first problem by assuming that \lstinline!hsfun_to_host'!
@@ -925,10 +937,10 @@ on pure functions, depending on the type of function being marshalled.
 
 Looking closer at the problematic \lstinline!ToAny! instance, we find that
 the \lstinline!Exportable t => ToAny t! instance provides
-\lstinline!Exportable! for any \lstinline!ToAny!, and the
-\lstinline!ToAny t => Exportable t! instance provides \lstinline!ToAny!,
-creating a loop which creates instances for both type classes matching any
-type.
+\lstinline!ToAny! for any \lstinline!Exportable! type, and the
+\lstinline!ToAny t => Exportable t! instance provides \lstinline!Exportable! in
+return, creating a loop which creates instances for both type classes
+matching any type.
 
 The \lstinline!ToAny t => Exportable t! instance is necessary
 for our type level recursion to work out when marshalling pure functions,
@@ -1515,10 +1527,6 @@ guaranteeing the complete absence of \lstinline!eval! from the generated host
 code would remove the restriction that our host language supports dynamic code
 evaluation at runtime, notably making our interface implementable on
 recent versions of the Java Virtual Machine.
-
-While the interface presented in this paper is implementable across a wide
-range of host environments, we have yet to implement this interface for a
-non-JavaScript environment.
 Implementing this interface for the Java Virtual Machine, with the
 prerequisite Haskell-to-JVM compiler, would lend further weight to our
 assertion that this interface is both both useful and broadly implementable.
