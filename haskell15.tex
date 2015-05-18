@@ -1,0 +1,1633 @@
+%-----------------------------------------------------------------------------
+%
+%               Template for sigplanconf LaTeX Class
+%
+% Name:         sigplanconf-template.tex
+%
+% Purpose:      A template for sigplanconf.cls, which is a LaTeX 2e class
+%               file for SIGPLAN conference proceedings.
+%
+% Guide:        Refer to "Author's Guide to the ACM SIGPLAN Class,"
+%               sigplanconf-guide.pdf
+%
+% Author:       Paul C. Anagnostopoulos
+%               Windfall Software
+%               978 371-2316
+%               paul@windfall.com
+%
+% Created:      15 February 2005
+%
+%-----------------------------------------------------------------------------
+
+
+\documentclass{sigplanconf}
+
+% The following \documentclass options may be useful:
+
+% preprint      Remove this option only once the paper is in final form.
+% 10pt          To set in 10-point type instead of 9-point.
+% 11pt          To set in 11-point type instead of 9-point.
+% authoryear    To obtain author/year citation style instead of numeric.
+
+\usepackage{amsmath}
+\input{macros}
+
+\begin{document}
+\special{papersize=8.5in,11in}
+\setlength{\pdfpageheight}{\paperheight}
+\setlength{\pdfpagewidth}{\paperwidth}
+
+\exclusivelicense
+\conferenceinfo{Haskell Symposium~'15}{September 3--4, 2015, Vancouver, Canada} 
+\copyrightyear{2015}
+\copyrightdata{bogus}
+\doi{bogus}
+
+% Uncomment one of the following two, if you are not going for the 
+% traditional copyright transfer agreement.
+
+
+%\permissiontopublish             % ACM gets nonexclusive license to publish
+                                  % (paid open-access papers, 
+                                  % short abstracts)
+
+\titlebanner{-- Haskell Symposium '15 draft submission --}        % These are ignored unless
+\preprintfooter{-- -- -- -- draft -- -- -- --}   % 'preprint' option specified.
+
+\title{Foreign Exchange at Low, Low Rates}
+\subtitle{A lightweight, platform-agnostic FFI for high level Haskell}
+
+\authorinfo{Anton Ekblad}
+           {Chalmers University of Technology}
+           {antonek@chalmers.se}
+
+\maketitle
+
+\begin{abstract}
+  We present a novel yet simple foreign function interface for Haskell dialects
+  targeting high level platforms. The interface automates marshalling,
+  eliminates boilerplate code, allows increased sanity checking of external
+  data, and is implementable as a plain Haskell '98 library across a range of
+  Haskell compilers and host environments without any modification to the
+  compiler or environment.
+  
+  We give an implementation of this interface for the JavaScript-targeting
+  Haste compiler, and show how the basic interface can be
+  further optimized with minimal effort to perform on par with Haskell's
+  vanilla foreign function interface, as well as extended to support automatic
+  marshalling of functions and modified to support a larger range of host
+  environments at the cost of a slight increase in implementation complexity.
+\end{abstract}
+
+\category{D.1.1}{Programming Techniques}{Applicative (functional) Programming}
+\category{D.2.11}{Software Architectures}{Languages}
+\category{D.2.12}{Interoperability}{Interface definition languages}
+
+% general terms are not compulsory anymore, 
+% you may leave them out
+%\terms
+%term1, term2
+%
+\keywords
+compilers; interoperability; web
+
+\section{Introduction}\label{sec:intro}
+
+Interfacing with other languages is one of the more painful aspects of modern
+day Haskell development. Consider figure \ref{lst:bad-ffi}, taken from the
+standard libraries of GHC; a ``simple'' piece of code to retrieve the current
+time\ \cite{time}.
+
+\begin{listingfloat}
+\begin{code}
+data CTimeval = MkCTimeval CLong CLong
+
+instance Storable CTimeval where
+	sizeOf _ = (sizeOf (undefined :: CLong)) * 2
+	alignment _ = alignment (undefined :: CLong)
+	peek p = do
+		s   <- peekElemOff (castPtr p) 0
+		mus <- peekElemOff (castPtr p) 1
+		return (MkCTimeval s mus)
+	poke p (MkCTimeval s mus) = do
+		pokeElemOff (castPtr p) 0 s
+		pokeElemOff (castPtr p) 1 mus
+
+foreign import ccall unsafe "time.h gettimeofday"
+   gettimeofday :: Ptr CTimeval -> Ptr () -> IO CInt
+
+getCTimeval :: IO CTimeval
+getCTimeval = with (MkCTimeval 0 0) $ \ptval -> do
+  throwErrnoIfMinus1_ "gettimeofday" $ do
+    gettimeofday ptval nullPtr
+  peek ptval
+\end{code}
+\caption{The current state of foreign imports}
+\label{lst:bad-ffi}
+\end{listingfloat}
+
+This code snippet is more akin to thinly veiled C code than proper, readable
+Haskell; an unfortunate reality of working with the standard foreign function
+interface. But is this really the best we can do?
+
+When the world we are interfacing with uses C as its lingua franca, then the
+FFI may be quite enough. However, Haskell does not only compile to
+traditional C-based architectures, but to higher level environments - most
+prominently JavaScript - as well. In writing this paper, we seek to liberate
+Haskell code targeting JavaScript and similar high level platforms from the
+shackles of the low level Foreign Function Interface used to interface
+Haskell with C since time immemorial.
+
+The FFI prioritizes compatibility via a lowest common denominator language: C.
+To avoid making communications with our high level target platforms subject
+to this unfortunate detour via an interface that fits neither Haskell nor
+our target platform, we desire the following properties in a new FFI for a
+hosted Haskell dialect:
+
+\begin{itemize}
+\item
+  It should automatically take care of marshalling for any types where
+  marshalling is defined, without extra conversions or other boilerplate code.
+\item
+  Users should be able to easily define their own marshalling schemes for
+  arbitrary types.
+\item
+  It should allow importing arbitrary host language code, not just named,
+  statically known functions.
+\end{itemize}
+
+Making this list a bit more concrete in the form of an example, we would like
+to write high level code like that in figure \ref{lst:good-ffi}.
+
+\begin{listingfloat}
+\begin{code}
+  data UTCTime = UTCTime {
+      msecs :: Word,
+      usecs :: Word
+    } deriving Generic
+  instance FromAny UTCTime
+
+  getCurrentTime :: IO UTCTime
+  getCurrentTime =
+    host "() => {var now = window.performance.now();\\
+                \\return {msecs: Math.trunc(now),\\
+                \\        usecs: Math.trunc(now*1000)};}"
+\end{code}
+\caption{The desired state of foreign imports}
+\label{lst:good-ffi}
+\end{listingfloat}
+
+Contrasting this with the standard FFI code from figure \ref{lst:bad-ffi}:
+
+\begin{itemize}
+\item
+  The low level C types are gone, replaced by a nice, descriptive record type,
+  and so is the \lstinline!peek!ing and \lstinline!poke!ing of pointers.
+\item
+  The imported function arrives ``batteries included'', on equal footing with
+  every other function in our program. No extra scaffolding or boilerplate
+  code is necessary.
+\item
+  We have not only imported the \lstinline!gettimeofday! system call,
+  but \emph{implemented} it as well.
+  We no longer need to take the long way around with external header
+  files and named, statically known functions.
+\end{itemize}
+
+\paragraph{A note on ``hosted'' Haskell}
+Every programming language is in some sense hosted, where ``hosting'' refers
+to the act of providing said language with an environment in which to execute:
+assembly code is hosted by a physical machine and (usually) an operating
+system; some languages are hosted by C, using it as a compilation target and
+sharing its runtime system rather than compiling straight to machine code;
+and programs written in F\# or Java are hosted by the .NET framework and the
+Java Virtual Machine respectively.
+
+For the purpose of this paper, we take a language or dialect being
+\emph{hosted} to mean that it utilizes a higher level language than the
+traditional operating system and C assembly setup for its compilation target
+and runtime environment. In practice, this often implies JavaScript and its
+associated browser-provided runtime environments, web applications currently
+being very much in fashion, but applies equally well to the aforementioned
+.NET and JVM platforms.
+
+\paragraph{Our Contribution}\label{sec:contrib}
+In section \ref{sec:haste-foreign}, we present a novel interface for a hosted
+Haskell dialect to interface with its host language at a high level of
+abstraction, and describe its implementation for the Haste compiler.
+\ \cite{haste}
+
+The interface is implementable using plain Haskell '98 with only the Foreign
+Function Interface extension, and is extensible by the user in the types of
+data which can be marshalled between Haskell and host language, as well as in
+how those types are marshalled. It allows for context dependent sanity
+checking of incoming data from the host language, improving the safety
+of foreign functions. It generalizes over host languages in the sense that it
+is usable with any hosted Haskell dialect where the host language supports
+garbage collection, first class functions, and an \lstinline!eval!-like
+construct.
+
+In section \ref{sec:optimizations} we discuss various safety and performance
+concerns about our implementation, and show how these concerns can be
+alleviated by reaching outside the confines of Haskell '98.
+
+In section \ref{sec:extensions} we show the flexibility of our design by using
+it to implement marshalling of functions between the host and guest language,
+and use the GHC generics extension to implement a default marshalling behavior
+for any Haskell type. We also show how to lift the requirement that the host
+language supports dynamic code evaluation at runtime and with a slight
+modification to the Haskell compiler in use.
+
+For clarity and consistency, we will be using the ECMAScript 6
+draft specification\ \cite{es6}, from here on referred to simply as
+\emph{JavaScript}, as our target platform whenever it is necessary to include
+code in the host language.
+
+\subsection{Background}\label{sec:background}
+Traditionally, Haskell programs have used the Foreign Function Interface
+extension\ \cite{ffi} to communicate with other languages. This works
+passably well in the world of native binary programs running on bare metal,
+where the C calling conventions have reigned unchallenged since time
+immemorial. The C language has no notion of higher level data structures or
+fancy data representation, making it the perfect lowest common denominator
+interlingua for language to language communication:
+there is no ambiguity or clash between different languages' built-in
+representation of various higher level data structures, as there simply
+\emph{are} no higher level data structures.
+
+With the rise of the web browser as a major application platform, however,
+a whole new breed of \emph{hosted} dialects of Haskell and other functional
+programming languages have emerged, compiling not only to JavaScript and the
+web browser platform, but to other high level languages as well.
+New languages like Idris\ \cite{idris} offer a multitude of backends,
+some of which are hosted, and compilers like \emph{Haste}\ \cite{haste} and
+\emph{Ocsigen}\ \cite{ocsigen} take advantage of multiple backends to
+implement \emph{program slicing}, producing programs which run concurrently
+distributed over a hosted context and an unhosted, down-to-the-metal one.
+
+For these hosted language implementations, the same properties that make
+Haskell's traditional foreign function interface a good fit for language
+interoperability make it undesirable as a vehicle for interfacing with
+code written in the respective compiler's host language: the guest language
+commonly shares a large part of its runtime with the host language and
+internally uses many of the same data structures and representations, making
+the forced low level representations of the vanilla foreign function interface
+an unnecessary nuisance rather than a welcome common ground for data
+interchange.
+
+To further illustrate the issue, let us refer back to figure \ref{lst:bad-ffi},
+which we introduced in section \ref{sec:intro}.
+
+This code has several problems when interfacing with a high level language
+rather than the pointer-dominated world of C that the FFI was designed to
+cope with:
+
+\begin{itemize}
+\item
+  Pervasive use of pointers not only makes the code hard to read and
+  understand, but also does not map well to the underlying high level
+  language.
+\item
+  Jumping through type-level hoops is required to appease the
+  \lstinline!foreign import! declaration, which only recognizes types that
+  make sense in C.
+\item
+  Extra scaffolding is required at all call sites to marshal data to/from
+  their respective C implementations. While this is usually solved
+  by hiding the foreign imports themselves and exporting wrapper functions to
+  save the module's consumer from having to deal with these details, as done
+  in this example, this still requires someone to write that extra
+  boilerplate code.
+\item
+  The FFI only lets us import named external functions, but our high level
+  host language may support higher order functions - it would be nice to be able
+  to take advantage of this fact.
+\end{itemize}
+
+In addition to the above points, while not exhibited by this particular
+example, passing callbacks across the foreign function interface is highly
+problematic as well.
+
+When working in a hosted Haskell dialect, we ought to be able to do better
+than this: bound no more by the fetters of C, hosted Haskell should be able
+to interface with its host language in a less verbose and more flexible manner.
+
+\section{A New Way}\label{sec:haste-foreign}
+Our interface is based on the idea that the entirety of an interaction with the
+host environment need not be an atomic operation. Rather, we attempt to break
+foreign calls down into its constituent parts: marshalling arguments into the
+target language, performing the actual call, and finally marshalling the
+results back into Haskell. We implement these parts in Haskell itself to the
+extent possible, only reaching out to the host environment when it is clear
+that a task is impossible to perform within the confines of Haskell.
+
+\subsection{Crossing the Rift}\label{sec:interface}
+As the main purpose of a foreign interface is to shovel data back and
+forth through a rift spanning two separate programming worlds, it makes sense
+to begin the design of any such interface with one central question:
+what data can pass through the rift and come out on the other side still making
+sense?
+
+In our method, the class of data fulfilling this criterion is embodied in the
+abstract \lstinline!HostAny! data type, inhabited by host language-native
+representations of arbitrary Haskell values.
+A data type is then considered to be marshallable if and only if it can be
+converted to and/or from \lstinline!HostAny!.
+We express this notion using two appropriately named type classes.
+
+\begin{code}
+  data Any
+  type HostAny = Ptr Any
+
+  class ToAny a where
+    toAny :: a -> HostAny
+
+  class FromAny a where
+    fromAny :: HostAny -> IO a
+\end{code}
+
+We might find a \lstinline!HostAny! instance for \lstinline!ToAny!
+and \lstinline!FromAny! handy. Of course, \lstinline!HostAny! already being
+in its host language representation form, the instances are trivial.
+
+\begin{code}
+  instance ToAny HostAny where toAny = id
+  instance FromAny HostAny where FromAny = return
+\end{code}
+
+We must then provide some means to convert values of primitive types to their
+host language representation. This is a simple proposition, as this is the
+forte of the vanilla foreign function interface.
+
+\begin{code}
+  foreign import ccall intToAny :: Int -> HostAny
+  foreign import ccall anyToInt :: HostAny -> IO Int
+
+  instance ToAny Int where toAny = intToAny
+  instance FromAny Int where fromAny = anyToInt
+  ...
+\end{code}
+
+However, if passing simple values was all we wanted to do, then there would be
+no need to look any further than the vanilla foreign function interface.
+We must also provide some way of combining values into more complex values,
+to be able to represent lists, record types and other conveniences we take for
+granted in our day to day development work.
+But how should these values be combined? Depending on our host language, we
+may have different primitive data structures at our disposal.
+
+Fortunately, most host languages of interest support two basic aggregate types,
+which are sufficient to represent values of any type: arrays and dictionaries.
+
+For the purpose of brevity, we assume that we have
+access to a pair of functions
+\lstinline!arrToList :: FromAny a => HostAny -> [a]!
+and \lstinline!listToArr:: ToAny a => [a] -> HostAny!
+which are used to implement the \lstinline!FromAny! and \lstinline!ToAny!
+instances respectively for lists;
+they are trivial to implement either in Haskell using the vanilla foreign
+function interface to gradually build a list of \lstinline!HostAny! values,
+or on the host language side exploiting knowledge of the compiler's
+data representation.
+
+For dictionaries, the conversion is not as clear-cut. Depending on the data
+we want to convert, the structure of our desired host language representation
+of two values may well be different even when their guest language
+representations are quite similar, or even identical.
+Hence, we need to put the power over this decision into the hands of the user,
+providing functionality to build as well as inspect user-defined dictionaries.
+
+We will need three basic host language operations: creating a new dictionary,
+associating a dictionary key with a particular value, and looking up values
+from dictionary keys. From these we construct two functions to marshal compound
+Haskell values to and from dictionaries: \lstinline!mkDict!
+and \lstinline!getMember!, as shown in figure \ref{lst:dicts}.
+
+\begin{listingfloat}
+\begin{code}
+  foreign import ccall
+    newDict :: IO HostAny
+  foreign import ccall
+    set :: HostAny -> HostString -> HostAny -> IO ()
+  foreign import ccall
+    get :: HostAny -> HostString -> IO HostAny
+  foreign import ccall
+    has :: HostAny -> HostString -> IO Bool
+  
+  mkDict :: [(String, HostAny)] -> HostAny
+  mkDict xs = unsafePerformIO $ do
+    d <- newDict
+    mapM_ (\k v -> set d (toHostString k) v) xs
+    return d
+    
+  getMember :: FromAny a => HostAny -> String -> IO (Maybe a)
+  getMember dict key = do
+    let key' = toHostString key
+    has_key <- dict `has` key'
+    if has_key
+      then get dict key' >>= fmap Just . fromAny
+      else return Nothing
+\end{code}
+\caption{Reading and writing dictionaries}
+\label{lst:dicts}
+\end{listingfloat}
+
+This gives us the power to represent any composite or primitive data
+type. To give an intuition of the interface's use, figure
+\ref{lst:tuplemaybeinstances} gives possible \lstinline!ToAny! and
+\lstinline!FromAny! instances for tuples and the \lstinline!Maybe! type.
+Note how \lstinline!Maybe a! is represented in the host language as a
+dictionary which is either {\tt \{"tag": "nothing"\}} or
+{\tt \{"tag": "something", "data": a\}}.
+
+It is also worth noting that the implementation of \lstinline!getMember! is
+the reason for \lstinline!fromAny! returning a value in the \lstinline!IO!
+monad: foreign data structures are rarely, if ever, guaranteed to be immutable
+and looking up a key in a dictionary is effectively dereferencing a reference,
+so we must perform any such lookups at a well defined point in time,
+lest we run the risk of the value being changed in between the application
+of our marshalling function and the evaluation of the resulting thunk.
+
+\begin{listingfloat}
+\begin{code}
+  instance (ToAny a, ToAny b) => ToAny (a, b) where
+    toAny (a, b) = toAny [toAny a, toAny b]
+
+  instance (FromAny a, FromAny b) => FromAny (a, b) where
+    fromAny x = do
+      [a, b] <- fromAny x
+      a' <- fromAny a
+      b' <- fromAny b
+      return (a', b')
+
+  instance ToAny a => ToAny (Maybe a) where
+    toAny (Just x) =
+      mkDict [("tag",  toAny "something"),
+              ("data", toAny x)]
+    toAny Nothing =
+      mkDict [("tag",  toAny "nothing")]
+
+  instance FromAny a => FromAny (Maybe a) where
+    fromAny x = do
+      tag <- getMember x "tag"
+      case tag of
+        Just "something" -> getMember x "data"
+        Just _           -> return Nothing
+        Nothing          -> error "Not Maybe!"
+\end{code}
+\caption{Possible instances for tuples and \lstinline!Maybe!}
+\label{lst:tuplemaybeinstances}
+\end{listingfloat}
+
+With this, we are ready to tackle the actual importing of functions.
+
+\subsection{Importing functions}\label{sec:import}
+
+Making an effort to keep our interface as simple as possible, we would very
+much like to be able to import functions using a single function.
+However, imported functions should also be usable without any extra
+scaffolding; what type should such a function have?
+Since we want to be able to import functions of just about any type, it clearly
+needs to be polymorphic. Said functions live in the effectful world of our
+host language, so the imported functions should live in the \lstinline!IO!
+monad in the interest of safety. We want to be able to import functions of any
+arity, so it also needs to be variadic. Finally, we also need to specify the
+host code to import somehow.
+
+After some contemplation, we come up with the following type, with instances of
+the \lstinline!Import! class fulfilling the above criteria: variadic functions
+with polymorphic arguments and return values in the \lstinline!IO! monad.
+
+\begin{code}
+  class Import f
+
+  host :: Import f => String -> f
+\end{code}
+
+\begin{listingfloat}
+\begin{code}
+  logError :: String -> IO ()
+  logError = host "e => {console.error('Oops: ' + e);}"
+\end{code}
+\caption{Example of an imported function}
+\label{lst:importexample}
+\end{listingfloat}
+
+This will let us write import declarations like in figure
+\ref{lst:importexample}, creating proper Haskell functions from strings of
+host language code.
+
+The types of our imported functions need to differ depending on the arity of
+the imported host language code. This necessitates \lstinline!host! returning
+some variadic function. Fortunately, there is a well known trick to accomplish
+this, described in\ \cite{printf}, which uses an inductive class instance to
+successively build up a list of arguments over repeated function applications,
+and a base case instance to perform some computation over said arguments after
+the function in question has been fully applied.
+In the case of the \lstinline!host! function, that computation would be
+applying a foreign function to said list of arguments.
+
+This suggests the following class definition:
+
+\begin{code}
+  type HostFun = HostAny
+
+  class Import f where
+    imp0rt :: HostFun -> [HostAny] -> a
+\end{code}
+
+For our purposes, the base case is a nullary computation in the IO monad:
+
+\begin{code}
+  foreign import ccall
+    apply :: HostFun -> HostAny -> IO HostAny
+
+  instance FromAny a => Import (IO a) where
+    imp0rt f args =
+      apply f (toAny args) >>= fromAny
+\end{code}
+
+Note the use of a foreign import in our base case. As the application of a
+foreign function to a foreign list of foreign arguments is clearly, well, a
+\emph{foreign} matter, we must call out to the host language for this final
+step.
+The list of arguments needs to be converted from \lstinline![HostAny]! to
+\lstinline!HostAny! in order to squeeze it through the vanilla foreign
+function interface, and the value we get back marshalled back into a proper
+Haskell value.
+
+The inductive case is not much more complex: we only need to marshal a single
+argument and recurse.
+
+\begin{code}
+  instance (ToAny a, Import b) =>
+           Import (a -> b) where
+    imp0rt f args =
+      \arg -> imp0rt f (toAny arg : args)
+\end{code}
+
+With this, we have all the building blocks required to implement the
+\lstinline!host! function. With all the hard work already done, the
+implementation is simple. For the sake of brevity, we assume the
+existence of a host language specific \lstinline!HostString! type, which may
+be passed as an argument over the vanilla foreign function interface, and a
+function \lstinline!toHostString :: String -> HostString!.
+
+\begin{code}
+  foreign import ccall
+    eval :: HostString -> HostFun
+
+  host :: Import f => HostString -> f
+  host s = imp0rt f []
+    where
+      f = eval (toHostString s)
+\end{code}
+
+The foreign \lstinline!eval! import brings in the host language's evaluation
+construct. Recall that one requirement of our method is the existence of such
+a construct, to convert arbitrary strings of host language code into functions
+or other objects.
+
+\section{Optimizing for safety and performance}
+\label{sec:optimizations}
+While the implementation described up until this point is more or less
+feature complete, its non-functional properties can be improved quite a bit
+if we allow ourselves to stray from the tried and true, but slightly
+conservative, path of pure Haskell '98.
+
+Aside from implementation specific tricks - exploiting knowledge about a
+particular compiler's data representation to optimize marshalling, or even
+completely unroll and eliminate some of the basic interface's primitive
+operations, for instance - there are several general optimizations we can
+apply to significantly enhance the performance and safety of our interface.
+
+\subsection{Eliminating argument passing overheads}
+\label{sec:specialization}
+The performance-minded reader may notice something troubling about the
+implementation of \lstinline!imp0rt!: the construction of an intermediate list
+of arguments. Constructing this intermediate list only to convert it into a
+host language suitable representation which is promptly deconstructed as soon
+as it reaches the imported function takes a lot of work. Even worse, this work
+does not provide any benefit for the task to be performed: applying a foreign
+function.
+
+By the power of \emph{rewrite rules}\ \cite{rewriterules}, we can
+eliminate this pointless work in most cases by specializing the
+\lstinline!host! function's base case instance for different numbers of
+arguments. As shown in figure \ref{lst:specialization}, in addition to the
+general \lstinline!apply! function we define a series of \lstinline!apply0!,
+\lstinline!apply1!, etc. functions, one for each arity we want to optimize
+function application for. The actual specialization is then a mere matter of
+rewriting \lstinline!host! calls to use the appropriate application function.
+
+\begin{listingfloat}
+\begin{code}
+  {-# NOINLINE [0] host' #-}
+  host' :: FromAny a => HostFun -> [HostAny] -> IO a
+  host' f args = apply f (toAny args) >>= fromAny
+
+  instance FromAny a => Import (IO a) where
+    host = host'
+  
+  foreign import ccall
+    apply0 :: HostFun -> IO HostAny
+  foreign import ccall
+    apply1 :: HostFun -> HostAny -> IO HostAny
+  foreign import ccall
+    apply2 :: HostFun -> HostAny -> HostAny -> IO HostAny
+  ...
+  
+  {-# RULES
+    "apply0" [1] forall f. host' f [] =
+                 apply0 f >>= fromAny
+    "apply1" [1] forall f a. host' f [a] =
+                 apply1 f a >>= fromAny
+    "apply2" [1] forall f a b. host' f [b,a] =
+                 apply2 f a b >>= fromAny
+    ...
+   #- }
+\end{code}
+\caption{Specializing the \lstinline!host! base case}
+\label{lst:specialization}
+\end{listingfloat}
+
+\subsection{Preventing code injection}
+\label{sec:safe_host}
+Meanwhile, the \emph{safety-conscious} reader may instead be bristling at the
+thought of executing code contained in something as egregiously untyped and
+untrustworthy as a common string.
+Indeed, by allowing the conversion of arbitrary strings
+into functions, we're setting ourselves up for cross-site scripting attacks
+and other similar code injection attacks!
+
+While this is indeed true in theory, in practice, accidentally passing a
+user-supplied string to the \lstinline!host! function, which in normal use
+ought to occur almost exclusively on the top level of a module, is a quite
+unlikely proposition. Even so, it could be argued that if it is possible to use
+an interface for evil, its users almost certainly will at some point.
+
+Fortunately, the recent 7.10 release of the GHC compiler gives us the means to
+eliminate this potential pitfall. The \emph{StaticPointers} extension, its
+first incarnation described in\ \cite{cloudhaskell}, introduces the
+\lstinline!static! keyword, which is used to create values of type
+\lstinline!StaticPtr! from closed expressions. Attempting to turn any
+expression which is not known at compile time into a \lstinline!StaticPtr!
+yields a compiler error.
+
+Creating a \lstinline!safe_host! function which can not be used to execute
+user-provided code becomes quite easy using this extension, at the cost of
+slightly more inconvenient import syntax:
+
+\begin{code}
+  safe_host :: Import f => StaticPtr HostString -> f
+  safe_host = host . deRefStaticPtr
+
+  safe_alert :: String -> IO ()
+  safe_alert = safe_host $ static "alert"
+\end{code}
+
+\subsection{Eliminating \lstinline!eval!}
+\label{sec:inline-eval}
+Relying on \lstinline!eval! to produce our functions allows us to
+implement our interface in pure Haskell '98 without modifying the Haskell
+compiler in question, making the interface easy to understand, implement and
+maintain. However, there reasons why it may be in the implementor's best
+interest to forgo a small bit of that simplicity.
+
+The actual call to \lstinline!eval! does not meaningfully impact
+performance: it is generally only called once per import,
+the resulting function object cached thanks to lazy evaluation.
+\footnote{The main reason for \lstinline!eval! getting called more than once
+being unwise inlining directives from the user.}
+However, its dynamic nature \emph{does}
+carry a significant risk of interfering with the ability of the host language's
+compiler and runtime to analyze and optimize the resulting code.
+As discussed in section \ref{sec:performance}, this effect is very much in
+evidence when targeting the widely used V8 JavaScript engine.
+
+In the case of JavaScript, it is quite common to run programs through a
+\emph{minifier} - a static optimizer with focus on code size - before
+deployment. Not only do such optimizers suffer the same analytical
+difficulties as the language runtime itself, but due to the heavy use of
+renaming often employed by minifiers to reduce code size, special care needs
+to be taken when writing code that is not visible as such to the minifier:
+code which is externally imported or, in our case, locked away inside a string
+for later evaluation.
+
+Finally, by eliminating all occurrences of \lstinline!eval!, we may
+extend the usefulness of our interface to platforms which do not support
+evaluating code at runtime as well, most notably the JVM.
+
+Noting that virtually every sane use of our interface evaluates a \emph{static}
+string, a solution presents itself: whenever the \lstinline!eval! function
+is applied to a statically known string, do not generate the function call,
+but splice the contents of the string verbatim into the output code instead.
+
+This solution has the advantage of eliminating the code analysis obstacle
+provided by \lstinline!eval! for the case when our target code is statically
+known (which, as we noted before, is a basic sanity property of foreign
+imports), while preserving our interface's simplicity of implementation.
+
+By combining this approach with the method for restricting our interface to
+statically known strings described in section \ref{sec:safe_host},
+we guarantee the complete absence of \lstinline!eval! from the generated host
+code, removing the restriction that our host language supports dynamic code
+evaluation at runtime, notably making our interface implementable on
+recent versions of the Java Virtual Machine.
+
+\section{Extending the interface}
+\label{sec:extensions}
+
+\subsection{Dynamic function marshalling}
+\label{sec:marshalling-functions}
+\paragraph{Dynamic imports}
+One appealing characteristic of our interface is that it makes the marshalling
+of functions between Haskell and the host language easy. In the case of
+passing host functions into Haskell, the \lstinline!imp0rt! function used to
+implement \lstinline!host! has already done the heavy lifting for us.
+Only adding an appropriate \lstinline!FromAny! instance remains.
+
+Due to the polymorphic nature of functions, however, we must resort to using
+some language extensions to get the type checker to accept our instance:
+overlapping instances, flexible instances, and undecidable instances.
+Essentially, the loosened restrictions on type class instances allows an
+\lstinline!Import! instance to act as a synonym for \lstinline!FromAny!,
+allowing host language functions to return functions of any type admissible
+as an import type by way of the \lstinline!host! function.
+
+\begin{code}
+  instance Import a => FromAny a where
+    fromAny f = return (imp0rt f [])
+\end{code}
+
+\paragraph{Passing functions to foreign code}
+Passing functions the other way, out of Haskell and into our host language,
+requires slightly more work. While we already had all the pieces of the
+dynamic import puzzle at our disposal through our earlier implementation of
+\lstinline!host!, exports require one more tool in our toolbox: a way to turn
+a Haskell function into a native host language function.
+
+Much like the \lstinline!apply! function used in the implementation of
+\lstinline!host!, the implementation of such a function is specific to the
+host language in question. Moreover, as we are dealing with whatever format
+our chosen compiler has opted to represent functions by, this function is also
+dependent on the compiler.
+
+In order to implement this function, we assume the existence of another
+function \lstinline!hfsun_to_host!, to convert a Haskell function $f$ from $n$
+\lstinline!HostAny! arguments to a \lstinline!HostAny! return value $r$ in the
+IO monad into a host language function which, when applied to $n$ host
+language arguments, calls $f$ with those same arguments and returns the $r$
+returned by $f$.
+
+\begin{code}
+  foreign import ccall
+    hsfun_to_host :: ??? -> HostFun
+\end{code}
+
+But how can we make this function type check?
+As we are bound to the types the vanilla foreign function interface lets us
+marshal, we have no way of applying this function to a variadic Haskell
+function over \lstinline!HostAny!s.
+
+We know that, operationally, \lstinline!hsfun_to_host! expects a Haskell
+function as its input, but the types do not agree; we must somehow find a way
+to pass arbitrary data unchanged to our host language.
+Fortunately, standard Haskell provides us with a way to do exactly what we want:
+\lstinline!StablePointer!s.\ \cite{stableptr} Note that, depending on the
+Haskell compiler in use, this use of stable pointers may introduce a space
+leak. This is discussed further in section \ref{sec:host-gc}, and an
+alternative solution is presented.
+
+\begin{code}
+  import Foreign.StablePtr
+  import System.IO.Unsafe
+
+  foreign import ccall
+    hsfun_to_host' :: StablePtr a -> HostFun
+
+  hsfun_to_host :: Exportable f => f -> IO HostFun
+  hsfun_to_host f =
+    hsfun_to_host' `fmap` newStablePtr (mkHostFun f)
+\end{code}
+
+Just being able to pass functions to the host language is not enough: we still
+need to marshal return values from Haskell to our host language, and incoming
+arguments in the opposite direction. Essentially, we want to map
+\lstinline!fromAny! over all input arguments to a function, and
+\lstinline!toAny! over its return values.
+While superficially similar to the implementation of the \lstinline!Import!
+class in section \ref{sec:import}, this task is surprisingly tricky:
+where \lstinline!Import! modifies an arbitrary number of arguments and
+performs some action with respect to a monomorphic value - the
+\lstinline!HostFun! representation of a host language function - we now need
+to do the same to a variadic function.
+
+\paragraph{Modifying variadic functions using type families}
+A straightforward application of the \lstinline!Import! method is not flexible
+enough to tackle this problem. Instead, we bring in yet another language
+extension, closed type families\ \cite{closedtypefamilies}, to lend us the type
+level flexibility we need. We begin by defining the \lstinline!Exportable!
+type class first encountered in the type signature of \lstinline!hsfun_to_host!,
+and a closed type family describing the type level behavior of our function
+marshalling.
+
+\begin{code}
+  type family Host a where
+    type Host (a -> b) = a -> Host b
+    type Host (IO a)   = IO HostAny
+
+  class Exportable f where
+    mkHostFun :: f -> Host f
+\end{code}
+
+This is relatively straightforward. Inspecting the \lstinline!Host! type
+family, we see that applying \lstinline!mkHostFun! to any eligible function
+must result in a corresponding function of the same arity, but with its
+arguments and return values replaced by \lstinline!HostAny!.
+
+Giving the relevant \lstinline!Exportable! instances is now mostly a matter of
+making the types match up, and concocting a \lstinline!ToAny! instance is only
+a matter of composing our building blocks together.
+
+\begin{code}
+  instance ToAny a => Exportable (IO a) where
+    mkHostFun = fmap toAny
+
+  instance (FromAny a, Exportable b) =>
+           Exportable (a -> b) where
+    mkHostFun f =
+      mkHostFun . f . unsafePerformIO . fromAny
+  
+  instance Exportable f => ToAny f where
+    {-# NOINLINE toAny #-}
+    toAny = unsafePerformIO . hsfun_to_host
+\end{code}
+
+The one interesting instance here is that of the inductive case, where we use
+\lstinline!fromAny! in conjunction with \lstinline!unsafePerformIO! to marshal
+a single function argument. While using \lstinline!fromAny! outside the
+\lstinline!IO! monad is unsafe in the general case as explained in section
+\ref{sec:interface}, this particular instance is completely safe, provided that
+\lstinline!mkHostFun! is \emph{not} exported to the user, but only used to
+implement the \lstinline!ToAny! instance for functions.
+
+\lstinline!fromAny! will only be called unsafely when a function is marshalled
+into a \lstinline!HostAny! value and \emph{then} applied. There are two cases
+when this can happen: either the marshalled function is called from the host
+language, or it is marshalled back into Haskell and then applied.
+In the former case, the time of the call is trivially well defined assuming
+that our target language is not lazy by default, which is rather unlikely.
+In the latter case, the time of the call is still well defined, as our
+interface only admits importing functions in the \lstinline!IO! monad.
+
+Slightly more troubling is the use of \lstinline!unsafePerformIO! in
+conjunction with \lstinline!hsfun_to_host!.
+According to\ \cite{stableptr}, the creation of stable pointers residing in
+the \lstinline!IO! monad - the reason for \lstinline!hsfun_to_host! residing
+there as well - is to avoid accidentally duplicating the allocation of the
+stable pointer, something we can avoid by telling the compiler to never
+inline the function, ever.
+
+It is also worth pointing out that the concern over duplicating this allocation
+is only valid where this implementation espouses the aforementioned space leak
+problem, in which case the alternative implementation given in section
+\ref{sec:host-gc} should be preferred anyway.
+
+\paragraph{Marshalling pure functions}
+The above implementation only allows us to pass functions in the \lstinline!IO!
+monad to foreign code, but we would also like to support passing pure
+functions. There are two main obstacles to this:
+
+\begin{itemize}
+\item
+  The \lstinline!hsfun_to_host'! function expects a function in the
+  \lstinline!IO! monad.
+\item
+  Instantiating \lstinline!Exportable! for any type \lstinline!ToAny t => t!
+  would accidentally add a \lstinline!ToAny! instance for
+  \emph{any type at all}.
+  Even worse, this instance is completely bogus for most types, always treating
+  its argument as a function to be converted into a host language function!
+\end{itemize}
+
+We sidestep the first problem by assuming that \lstinline!hsfun_to_host'!
+can determine dynamically whether a function is pure or wrapped in the
+\lstinline!IO! monad, and take action accordingly.
+Another, slightly more verbose, possibility would be to alter the
+implementation of our marshalling code to use either
+\lstinline!hsfun_to_host'! or a function performing the same conversion
+on pure functions, depending on the type of function being marshalled.
+
+Looking closer at the problematic \lstinline!ToAny! instance, we find that
+the \lstinline!Exportable t => ToAny t! instance provides
+\lstinline!Exportable! for any \lstinline!ToAny!, and the
+\lstinline!ToAny t => Exportable t! instance provides \lstinline!ToAny!,
+creating a loop which creates instances for both type classes matching any
+type.
+
+The \lstinline!ToAny t => Exportable t! instance is necessary
+for our type level recursion to work out when marshalling pure functions,
+but we can prevent this instance from leaking to \lstinline!ToAny! where it
+would be unreasonably broad by replacing our \lstinline!ToAny! function
+instance with two slightly more specific ones.
+
+\begin{code}
+  type family Host a where
+    type Host (a -> b) = a -> Host b
+    type Host (IO a)   = IO HostAny
+    type Host a        = HostAny
+
+  instance (ToAny a, Host a ~ HostAny) => HostFun a where
+    mkHostFun = toAny
+
+  instance (FromAny a, Exportable b) => ToAny (a -> b) where
+    {-# NOINLINE toAny #-}
+    toAny = unsafePerformIO . hsfun_to_host
+
+  instance ToAny a => ToAny (IO a) where
+    {-# NOINLINE toAny #-}
+    toAny = unsafePerformIO . hsfun_to_host
+\end{code}
+
+Here we also see why the use of closed type families are necessary:
+the open type families originally introduced by Chakravarty et al
+in\ \cite{typefamilies} do not admit the overlapping type equations required
+to make pure functions an instance of \lstinline!Exportable!.
+
+\subsection{Exporting functions}
+\label{sec:exports}
+Very rarely are users prepared to abandon person-decades of legacy code;
+to reach these users, the ability to expose Haskell functionality to the host
+language is important. Alas, being implemented as a library, our interface is
+not capable of \lstinline!foreign export! declarations. We can, however,
+implement a substitute on top of it.
+
+Rather than a writing a library which when compiled produces a shared library
+for consumption by a linker, we give the user access to a function
+\lstinline!export! which when executed stores an exported function in a
+known location, where foreign language code can then access it.
+While this may seem like a silly workaround, this is how JavaScript programs
+commonly ``link against'' third party libraries.
+
+Using the function marshalling implemented in section
+\ref{sec:marshalling-functions}, implementing \lstinline!export! becomes
+quite simple.
+
+\begin{code}
+  export :: Exportable f => String -> f -> IO ()
+  export =
+    host "(name, f) => {window['haskell'][name] = f;}"
+\end{code}
+
+\subsection{Generic marshalling}
+\label{sec:default-instances}
+Returning to our motivating example with figure \ref{lst:good-ffi}, we note
+a conspicuous absence: the \lstinline!UTCTime! instance of \lstinline!FromAny!
+is not defined, yet it is still used by the \lstinline!host! function in the
+definition of \lstinline!getCurrentTime!. Although the instance can be defined
+in a single line of code, it would still be nice if we could avoid the tedium
+of writing that one line altogether. Thanks to generic programming and default
+type class instances, we can.
+
+Our implementation of generic marshalling uses GHC generics\ \cite{generics},
+and associated language extensions - most notably type operators and scoped
+type variables - making it specific to GHC-based compilers such as Haste and
+GHCJS\ \cite{ghcjs}. GHC generics allows us to traverse values of any type
+as though the type was uniformly defined as a tree of sums, products,
+constants and metadata, such as record selectors or constructor names.
+
+For the sake of brevity, and as the actual syntax of GHC generics is
+relatively nondescriptive due to its generality, we only give the basic method
+of our implementation is this paper, and only consider the case of marshalling
+Haskell values into their host language counterparts.
+Marshalling in the other direction uses the same basic method,
+and the complete implementation is available from \cite{haste-lang.org}.
+
+We begin by defining a the data type to represent a host language value while
+it is being constructed. A value can be either a singleton, a list of
+values or a dictionary.
+
+\begin{code}
+  data Value
+    = One HostAny
+    | List [HostAny]
+    | Dict [(HostString, HostAny)]
+\end{code}
+
+We then informally define the behavior of our generic marshalling function
+\lstinline!gToAny :: Rep a -> Value! as follows, where \lstinline!Rep! is
+a type provided by \lstinline!GHC.Generics! to enable generic traversal
+of its type argument.
+
+\begin{itemize}
+\item
+  When we reach a \emph{constructor argument} \lstinline!x! of a type
+  \lstinline!t! with a \lstinline!ToAny! instance, we use that instance to
+  marshal \lstinline!x! and return it as a single value:
+  \lstinline!One (toAny x)!.
+\item
+  When we reach a \emph{record selector} metadata node with a selector
+  name \lstinline!n! and a child node \lstinline!c!, we recursively marshal
+  \lstinline!c! and return it paired with its selector name:
+  \lstinline!Tree [(n, toAny x)]!.
+\item
+  When we reach a \emph{constructor} metadata node with a constructor name
+  name \lstinline!n! and a child node \lstinline!c!, we recursively marshal
+  \lstinline!c! and call the resulting value \lstinline!c'!.
+  \begin{itemize}
+  \item
+    \lstinline!c'! is a \emph{dictionary}, we add an entry to it to mark the
+    value's constructor name and return the resulting dictionary:
+    \lstinline!Tree (("tag", toAny n) : c')!.
+  \item
+    \lstinline!c'! is an \emph{empty list}, we simply return the constructor
+    name:
+    \lstinline!One (toAny n)!.
+  \item
+    \lstinline!c'! is a nonempty \emph{list} or a \emph{single item},
+    we return a new dictionary consisting of the constructor tag and the
+    \lstinline!HostAny! encoding of \lstinline!c'!:
+    \lstinline!Tree [("tag", toAny n), ("data", toAny c')]!.
+  \end{itemize}
+\item
+  When we reach a \emph{product} node with child nodes \lstinline!c1! and
+  \lstinline!c2!, signifying the union of two or more constructor arguments,
+  we recursively marshal \lstinline!c1! and \lstinline!c2! into
+  \lstinline!c1'! and \lstinline!c2'! respectively. We then \emph{merge}
+  \lstinline!c1'! and \lstinline!c2'! and return the result:
+
+  \begin{code}
+    merge c1' c2'
+      where
+        merge (One a) (One b)   = List [a, b]
+        merge (List a) (One b)  = List (a ++ [b])
+        merge (One a) (List b)  = List (a : b)
+        merge (List a) (List b) = List (a ++ b)
+        merge (Tree a) (Tree b) = Tree (a ++ b)
+  \end{code}
+
+  Note that the case where a tree is merged with a non-tree is undefined.
+  Trees arise \emph{only} from a use of record selectors. Haskell only
+  allows data constructors where either \emph{all} arguments have selectors,
+  or \emph{none} has, meaning that trees and non-trees will never appear in
+  the same product node.
+\item
+  When we reach a \emph{sum} node, signifying one of several data constructors
+  of a type, we will either have a \emph{left} child or a \emph{right} child.
+  We simply recurse down through whichever child node we have and return the
+  result.
+\end{itemize}
+
+Using this implementation, all that remains is to add a default instance to
+the \lstinline!ToAny! class.
+
+\begin{code}
+  class ToAny a where
+    toAny :: a -> HostAny
+    default toAny :: (GToAny (Rep a), Generic a)
+                  => a -> HostAny
+    toAny x =
+      case gToAny (from x) of
+        One x   -> x
+        List xs -> toAny xs
+        Tree d  -> mkDict d
+\end{code}
+
+This allows any type with a \lstinline!Generic! instance to automatically
+instantiate \lstinline!ToAny!, enabling us to write code like that in figure
+\ref{lst:generic-toany}.
+
+\begin{listingfloat}
+  \begin{code}
+    > data User = User
+    >   { name  :: String,
+    >   , email :: String,
+    >   , age   :: Int}
+    >   deriving Generic
+    > instance ToAny User
+
+    > printAny :: ToAny a => a -> IO ()
+    > printAny = ffi "x => {console.log(x.toString());}"
+    
+    > printAny $ User
+    >    { name  = "John Doe"
+    >    , email = "johndoe@example.com"
+    >    , age   = 32}
+
+    {'name'  : 'John Doe',
+     'email' : 'johndoe@example.com',
+     'age'   : 32}
+  \end{code}
+\caption{Generic marshalling in action}
+\label{lst:generic-toany}
+\end{listingfloat}
+
+\section{Performance}
+\label{sec:performance}
+It must be said, that performance is not a significant motivator for this work.
+High level features oftentimes come at the price of decreased performance,
+and calling back and forth between Haskell and the host environment is usually
+not cheap under the best circumstances.
+Even so, having a picture of how a particular tool performs vis a vis its
+alternative in the programmer's toolbox is a very useful, even essential,
+thing.
+
+We have measured the performance of an implementation of our interface for the
+Haste compiler, applying the optimizations described in section
+\ref{sec:optimizations}, against the Haste compiler's implementation of the
+vanilla FFI. To establish a baseline for basic marshalling rather than
+comparing apples to oranges by attempting to include more complex types
+into our benchmarks, types which may not even be properly marshallable using
+the vanilla FFI, we have chosen to only benchmark the marshalling of
+\lstinline!Double!s, which map directly to JavaScript's native
+\lstinline!Number! type.
+
+To get a picture of how our library fares in different scenarios,
+two microbenchmarks were devised: one which repeatedly applies a foreign
+function, which performs no computation to make differences in
+calling overhead stand out as much as possible, in a strict, tight, tail
+recursive loop, and one which does the same in a higher level loop,
+constructed from nested calls to \lstinline!mapM! over a list.
+In order to separately
+test the overheads of marshalling outbound and inbound data, the benchmarks
+were created using two variants each: one which ignores the value returned
+by the foreign function, and one which adds up the results.
+These benchmarks were then run and timed
+using the node.js JavaScript interpreter, with the foreign function imported
+through our library and the vanilla FFI respectively.
+
+While this may not be the most rigorous of performance evaluations,
+the results are repeatable, and the methodology is enough for our purposes:
+getting a rough picture of how much speed we are giving up for a more
+convenient interface.
+The results for each benchmark are given in table \ref{tbl:performance} as
+the ratio of the run time for our library over the run time for the vanilla
+FFI.
+
+
+\begin{table}
+  \renewcommand{\arraystretch}{1.5}
+  \begin{center}
+    \begin{tabular}{|r|c|l|}
+      \hline
+                       & Tight loop & Loose loop \\
+      \hline
+      Without incoming & 0.85       & 1.33 \\
+      \hline
+      With incoming    & 14.52      & 1.76 \\
+      \hline
+    \end{tabular}
+  \end{center}
+  \caption{Performance numbers, in relation to vanilla FFI}
+  \label{tbl:performance}
+\end{table}
+
+\paragraph{Tight loop, no inbound data}
+Looking at the performance numbers, our library performs surprisingly well in
+a highly optimized loop, even edging out the vanilla FFI by a slight margin.
+The reason for this discrepancy is not entirely clear. The only major difference
+generated in the JavaScript code generated between the two is the creation and
+evaluation of one extra thunk, as well as the first iteration of the loop
+being unrolled, for our interface. This appears to be enough of a change that
+the JavaScript interpreter is able to optimize that program slightly better
+than its vanilla FFI equivalent.
+
+\paragraph{Loose loop, no inbound data}
+Putting our library into a higher level context, this small and highly
+debatable performance advantage disappears. Due to our interface being
+implemented mainly as a pure Haskell library, the compiler is noticeably worse
+at figuring out the strictness properties of the program compiled using our
+library than with the program using the vanilla FFI, leading to some
+unnecessary creation and evaluation of thunks.
+
+\paragraph{Tight loop, with inbound data}
+Moving on to the benchmarks where we actually marshal incoming data, we see a
+\emph{huge} performance hit on inbound data. It turns out, that this is due to
+the increased safety of our interface. The vanilla foreign function
+interface happily passes whatever value it gets back into Haskell as a double,
+potentially wreaking type-unsafe havoc when it turns out that the ``double''
+returned was actually an array of strings containing someone's shopping list.
+
+In contrast, our library ensures that what is claimed at the type level - that
+the value coming from the outside world is a \lstinline!Double! - is actually
+true, by passing the marshalled value to the JavaScript built-in function
+\lstinline!Number!. What this benchmark tells us is that checking if something
+is a number or not is roughly 14 times slower than just copying the same value.
+By replacing our safe marshalling function with one that mimics the behavior
+of the vanilla FFI, we see the same performance and generated code as in the
+\emph{tight loop, no inbound data} case.
+
+\paragraph{Loose loop, no inbound data}
+Moving to a less optimized loop, the percentage of the execution time spend
+marshalling and calling foreign functions drops drastically, as we can see by
+the performance hit of our library being much smaller than for the tight,
+optimized loop. Analyzing the generated code, this is again due to the extra
+safety net, with an additional slight performance disadvantage from the return
+value being wrapped in a thunk, despite obviously (to a human) being strict
+coming from the host language; the malus to strictness analysis incurred by
+our library in action again.
+
+\paragraph{Performance verdict: acceptable}
+Judging by these numbers, disregarding the additional cost incurred by the
+additional safety measures, the performance of our library is quite acceptable,
+ranging from slightly faster than the vanilla FFI to at most twice as slow.
+Considering that calls between Haskell and the host environment are usually
+relatively few and far between, this performance difference should be
+negligible. For code which has no choice but to make a large number of calls to
+low level host language functions in performance critical loops,
+using the vanilla FFI alongside our interface remains an option,
+allowing the user to have the FFI cookie and eat it at the same time.
+
+While the additional performance cost incurred from the additional safety may
+be unwanted when the user is completely sure that a particular function
+will never, ever return anything but an actual \lstinline!Number!, said user
+is in free to write an \lstinline!UnsafeDouble! wrapper with an appropriately
+fast and loose \lstinline!FromAny! instance to sidestep the (hopefully)
+unnecessary safety measures.
+
+\section{Limitations}\label{sec:discussion}
+While two of the tree main limitations our interface places on its host
+language - the presence of a dynamic code evaluation construct and support for
+first class functions - have hopefully been adequately explained, and their
+severity slightly alleviated, in sections \ref{sec:interface} and
+\ref{sec:inline-eval}, there are still several design choices and lingering
+limitations that may need further justification.
+
+\subsection{fromAny type level expressiveness}
+The \lstinline!fromAny! function used to implement marshalling in section
+\ref{sec:interface} is by definition not total. As its purpose is to
+convert values of god-knows-what host language type into properly typed Haskell
+values, from the simplest atomic values to the most complex data structures,
+the possibility for failure is apparent. Why, then, does its type not admit
+the possibility of failure, for instance by wrapping the converted value in a
+\lstinline!Maybe! or \lstinline!Either!?
+
+Recall that \lstinline!fromAny! will almost always be called when
+automatically converting arguments to and return values from callbacks and
+imported foreign functions respectively. In this context, even if a conversion
+were to fail with a \lstinline!Left "Bad conversion"! error, there is no way
+for this error value to ever reach the user. The only sensible action for the
+foreign call to take when encountering an error value would be to throw an
+exception, informing the user ``out of band'' rather than by somehow threading
+an error value to the entire call.
+
+It is then simpler, not to mention more performant, to trust that the foreign
+code in question is well behaved - something we must do anyway since we
+automatically rely on its correctness by allowing our program to depend upon
+it - and throw that exception immediately on conversion failure rather than
+taking a detour via error values, should this trust prove to be misplaced.
+
+\subsection{Limitation to garbage collected host languages}
+\label{sec:host-gc}
+The observant reader may notice that up until this point, we have completely
+ignored something which very much concerns traditional foreign function
+interfaces: ownership and eventual deallocation of memory.
+
+Our high level interface depends quite heavily on its target language being
+garbage collected, as having to manually manage memory introduces significant
+boilerplate code and complexity - the very things this interface aims to avoid.
+As target platforms \emph{with} garbage collections having to deal with low
+level details such as memory management is the core motivation for this work,
+rectifying this ``problem'' does not fall within the scope of this paper.
+
+Even so, memory management does rear its ugly head in section
+\ref{sec:marshalling-functions}, where stable pointers are used to pass data
+unchanged from Haskell into our host language, and promptly ignored - note
+the complete absence of calls to \lstinline!freeStablePtr!. Implementing our
+interface for the Haste compiler, this is not an issue: Haste makes full use
+of JavaScript's garbage collection capabilities to turn stable pointers into
+fully garbage collected aliases of the objects pointed to.
+It is, however, quite conceivable for an implementation to perform some manual
+housekeeping of stable pointers even in a garbage collected language, in which
+case this use of our interface will cause a space leak as nobody is keeping
+track of all the stable pointers we create.
+
+As the stable pointers in question are never dereferenced or otherwise
+used within Haskell, this hypothetical space leak can be eliminated by
+replacing stable pointers with a slight bit of unsafe, implementation-specific
+magic.
+
+\begin{code}
+  import Unsafe.Coerce
+  import Foreign.StablePtr hiding (newStablePtr)
+
+  data FakeStablePtr a
+  fakeStablePtr :: a -> FakeStablePtr a
+
+  newStablePtr :: a -> StablePtr
+  newStablePtr = unsafeCoerce . fakeStablePtr
+\end{code}
+
+The \lstinline!FakeStablePtr! type and the function by the same name are used
+to mimic the underlying structure of \lstinline!StablePtr!. This makes its
+exact implementation specific to the Haskell compiler in question, unlike
+the ``proper'' solution based on actual stable pointers. The Haste
+compiler, being based on GHC, has a very straightforward representation for
+stable pointers, merely wrapping the ``machine'' level pointer in a single
+layer of indirection, giving us the following implementation of fake stable
+pointers:
+
+\begin{code}
+  data FakeStablePtr a = Fake !a
+  
+  fakeStablePtr = Fake
+\end{code}
+
+Thus, we may choose our implementation strategy depending on the capabilities
+of our target compiler. For a single implementation targeting multiple
+platforms however, proper stable pointers are the safer solution.
+
+\subsection{Restricting imports to the IO monad}
+The interface presented in this paper does not support importing pure
+functions; any function originating in the host language must be safely locke
+up within the IO monad. This may be seen as quite a drawback, as a host
+language function operating solely over local state is definitely not
+beyond the realms of possibility. Looking at our implementation of function
+exports for pure functions, it seems that it would be possible to implement
+imports in a similar way, and indeed we could.
+
+However, ``could'' is not necessarily isomorphic to ``should''.
+Foreign functions do, after all, come from the unregulated, disorderly world
+outside the confines of the type checker. Haskell's type system does not
+allow us to mix pure functions with ``probably kind of pure, maybe''
+functions, and for good reason - it is not clear that we should lift this
+restriction just because a function is defined in another language.
+
+Moreover, as explained in section \ref{sec:interface}, marshalling inbound
+data is in many cases an inherently effectful operation, particularly when
+involving complex data structures. Permitting the import of pure functions,
+knowing fully well that a race condition exists in the time window between
+the import's application and the resulting thunk's evaluation, does not strike
+us as a shining example of safe API design.
+
+\subsection{Continuation-based blocking in non-concurrent environments}
+A particularly neat feature of the foreign function interface employed by the
+GHCJS compiler is the ability for foreign host code to suspend execution while
+waiting for an even to occur, even though its JavaScript host environment is
+devoid of any concurrency support.\ \cite{ghcjs}
+This is accomplished by giving imported functions an extra parameter:
+a continuation to be called upon completion
+of the foreign operation to resume execution of the Haskell program, instead
+of simply returning like a ``normal'' JavaScript function would.
+
+This functionality is not supported by our interface. GHCJS accomplishes this
+by outputting continuation passing code which is executed by a clever
+trampolining machinery. Supporting this feature would tie the interface to
+a particular code generation strategy as well as add considerable complexity;
+a price we deem too high to pay for this feature.
+
+Instead, this functionality can be implemented on top of our interface without
+much difficulty using a construct dubbed the ``poor man's concurrency monad''
+\ \cite{poormansconcurrencymonad}; a monad implementing cooperative
+multitasking with blocking synchronization variables in non-concurrent
+environments.
+
+\section{Related work}\label{sec:related}
+Aside from the vanilla foreign function interface used as the basis of our
+interface, there are several different, more modern, takes on interfacing
+purely functional languages with host language code.
+One common denominator is specialization: without exception, these
+implementations rely in large part on modifications to the compiler or
+language itself, in contrast to our interface which makes some sacrifices
+in order to be implementable as a library over as wide a range of Haskell
+dialects as possible.
+
+\paragraph{Idris: host-parametric FFI}
+\emph{Idris} is a dependently typed, Haskell-like language with backends for
+several host environments, JavaScript being one of them.\ \cite{idris}
+Like Haskell, Idris features monadic IO, but unlike Haskell, Idris' IO monad
+\emph{is}, in a sense its foreign function interface.
+IO computations are constructed from primitive building blocks, imported using
+a function not unlike our \lstinline!host! function described in section
+\ref{sec:interface}, and parameterized over the target environment.
+This ensures that Idris code written specifically for a native environment
+is not accidentally called from code targeting JavaScript and vice versa.
+
+Idris' import function does not necessarily accept strings of foreign
+language code, but is parameterized over the target environment just like the
+IO monad; for JavaScript-targeting code, foreign code happens to be specified
+as strings, but could conceivably consist of something more complex, such as
+an embedded domain-specific language for building Idris-typed host language
+functions.
+
+\paragraph{Fay: featureful but static}
+Our interface was partially inspired by the foreign function interface of the
+\emph{Fay} language,
+a ``proper subset of Haskell that compiles to JavaScript''.\ \cite{fay}
+While the two are very similar in syntax, allowing users to import typed
+strings of host language code, Fay's solution is highly specialized.
+The compiler takes a heavy hand in the marshalling and import functionality,
+parsing the host language code and performing certain substitutions on it.
+While marshalling of arbitrary types is available, this marshalling is not
+easily controllable by the user, but follows a sensible but fixed format
+determined by the compiler.
+This approach makes sense, as the interface is designed to support the Fay
+language and compiler alone, but differs from our work which aims to create
+a more generally applicable interface.
+
+\paragraph{GHCJS: JavaScriptFFI}
+The \emph{GHCJS} Haskell-to-JavaScript compiler\ \cite{ghcjs} utilizes the
+relatively recent \emph{JavaScriptFFI} GHC extension,
+which has been surprisingly rarely described outside a GHCJS context.
+Much like Fay, this extension parses and
+performs substitutions over imported host language code to make imports
+slightly more flexible, allowing for importing arbitrary expressions rather
+than plain named functions.
+It also enables additional safety levels for foreign
+imports: \emph{safe}, where bad input data is replaced by default values and
+foreign exceptions caught and marshalled into Haskell equivalents,
+and \emph{interruptible}, which allows host language code to suspend execution
+indefinitely even though JavaScript is completely single threaded.
+This is accomplished by handing interruptible functions a continuation in
+addition to their usual arguments, to call with the foreign function's
+``return value'' as its argument when it is time for the foreign function
+to return and let the Haskell program resume execution.
+
+The JavaScriptFFI extension preserves the regular FFI's onerous restrictions
+on marshallable types however, and while while GHCJS comes with convenience
+functions to convert between these more complex types and the simple ones
+allowed through the FFI, marshalling is not performed automatically and
+functions in particular are cumbersome to push between Haskell and JavaScript.
+
+\paragraph{UHC: the traditional FFI, on steroids for JavaScript}
+The UHC Haskell compiler comes with a JavaScript backend as well, and matching
+higher level extensions to its foreign function interface.\ \cite{uhc}
+Like Fay, UHC provides automatic conversion of Haskell values to JavaScript
+objects, as well as importing arbitrary JavaScript expressions, with some
+parsing and wildcard expansion.
+Also like Fay, the JavaScript representation produced by this
+conversion is determined by the compiler, and not user configurable.
+UHC does, however, provide several low level primitives for manipulating
+JavaScript objects from within Haskell, both destructively and in a purely
+functional manner.
+
+\paragraph{Quasi-quotes}
+Quasi-quotes represent another, more radically different, approach to the
+problem of bridging with a host language.\ \cite{quasiquotes}
+Allowing for the inline inclusion of large snippets of foreign code,
+quasi-quotes have a lot in common with our interface, even eclipsing it in
+power through anti-quotes, which allow the foreign code expressions to
+incorporate Haskell data provided that the proper marshalling has been
+implemented. Recent work by Manuel Chakravarty has extended the usefulness of
+quasi-quotes even further, automating large parts of the stub generation
+and marshalling required for using quasi-quoted host language code as a
+foreign function interface.\ \cite{language-c-inline}
+
+Unfortunately, this usefulness comes at the price of a rather complex
+implementation. Not only is complex templating support from the compiler
+required, but implementations need to be able to parse the host language as
+well. A price in implementation effort that may not always be worth the extra
+expressive power it buys.
+
+\subsection{Future work}
+While the interface presented in this paper is implementable across a wide
+range of host environments, particularly with the modification described in
+section \ref{sec:inline-eval} to lift the restriction of the host language
+supporting a dynamic evaluation construct, we have yet to implement this
+interface for a non-JavaScript environment.
+Implementing this interface for the Java Virtual Machine, with the
+prerequisite Haskell-to-JVM compiler, would lend further weight to our
+assertion that this interface is both both useful and broadly implementable.
+
+Out interface does not currently catch and marshal host language
+exceptions, but requires foreign language code to take care of any exceptions.
+While the actual implementation is quite specific to a particular
+host environment, automatically converting exceptions would be a useful feature
+even so. Investigating the degree to which this feature could be implemented
+in a host platform agnostic manner would be a possible extension of this work.
+
+Due to the hard requirement that our host language be garbage collected,
+our interface is not currently applicable in a C context. This is unfortunate,
+as C-based host environments are still by far the most common for Haskell
+programs. It may thus be worthwhile to investigate the compromises needed
+to lift the garbage collection requirement from potential host environments.
+
+\section{Conclusions}
+\label{sec:conclusion}
+We have presented the design of a novel, portable and platform agnostic foreign
+function interface for hosted Haskell dialects. We have also given a number of
+optimizations, improving the performance and safety of our interface
+and lightening the restrictions placed on the host enfironment, and implemented
+our interface as a library for the Haste Haskell-to-JavaScript compiler.
+Finally, we have used this library to further extend our marshalling
+capabilities to cover functions, as well as generic default marshalling for
+arbitrary data types, contrasted out approach with a variety of existing
+foreign function interfaces, and demonstrated that our library is relatively
+performant.
+
+While our interface is currently not applicable to Haskell implementations
+targeting low level, C-like environments, it brings significant reductions in
+boilerplate code and complexity for users needing to interface their Haskell
+programs with their corresponding host environment in the space where it
+\emph{is} applicable: Haskell implementations for high level target platforms.
+
+The library is shipped in both source code and binary form as part of the
+Haste distribution, available from the Haste Language website
+at\ \cite{haste-lang.org}.
+
+\acks
+This work has been partially funded by the Swedish Foundation for Strategic Research, under grant RAWFP. Additional thanks to Koen Claessen, Emil Axelsson and Atze van der Ploeg for their valuable feedback and comments.
+
+% We recommend abbrvnat bibliography style.
+
+\bibliographystyle{abbrvnat}
+
+% The bibliography should be embedded for final submission.
+
+\begin{thebibliography}{}
+\softraggedright
+
+\bibitem[Augustsson, Massey (2013)]{printf}
+  Augustsson, Lennart, and Massey, Bart. The {\tt Text.Printf} module.
+  Available from \url{http://hackage.haskell.org/package/base-4.8.0.0/docs/Text-Printf.html},
+  2015-04-01.
+\bibitem[Balat, Chambart, Henry (2012)]{ocsigen}
+  Balat, Vincent, Chambart, Pierre, and Henry, Grégoire.
+  "Client-server Web applications with Ocsigen." In WWW2012, p. 59. 2012.
+\bibitem[Brady (2015)]{idris}
+  Brady, Edwin.
+  "Cross-platform Compilers for Functional Languages."
+  Under consideration for Trends in Functional Programming, 2015.
+\bibitem[Chakravarty et al (2003)]{ffi}
+  Chakravarty, M. M. (Ed.). (2003).
+  The Haskell Foreign Function Interface 1.0: An Addendum to the Haskell 98
+  Report.
+\bibitem[Chakravarty (2014)]{language-c-inline}
+  Chakravarty, M. M. (2014, September).
+  Foreign inline code: systems demonstration.
+  In Proceedings of the 2014 ACM SIGPLAN symposium on Haskell (pp. 119-120).
+  ACM.
+\bibitem[Chakravarty, Keller, Peyton Jones (2005)]{typefamilies}
+  Chakravarty, M. M., Keller, G., \& Peyton Jones, S. (2005, September).
+  Associated type synonyms.
+  In ACM SIGPLAN Notices (Vol. 40, No. 9, pp. 241-253). ACM.
+\bibitem[Claessen (1999)]{poormansconcurrencymonad}
+  Claessen, K. (1999).
+  A poor man's concurrency monad.
+  Journal of Functional Programming, 9(03), 313-323.
+\bibitem[Dijkstra, Stutterheim, Vermeulen, Swierstra (2013)]{uhc}
+  Dijkstra, A., Stutterheim, J., Vermeulen, A., \& Swierstra, S. D. (2013).
+  Building JavaScript applications with Haskell.
+  In Implementation and Application of Functional Languages (pp. 37-52).
+  Springer Berlin Heidelberg.
+\bibitem[Done (2015)]{fay}
+  Done, C.
+  Fay programming language.
+  Available from \url{http://fay-lang.org/}, 2015-05-15.
+\bibitem[The 2015 ECMAScript Language Specification, Rev. 38 (2015)]{es6}
+  The 2015 ECMAScript Language Specification, Rev. 38, Final Draft.
+  Available from \url{http://wiki.ecmascript.org/lib/exe/fetch.php?id=harmony%3Aspecification_drafts&cache=cache&media=harmony:ecma-262_6th_edition_final_draft_-04-14-15.pdf},
+  (2015-05-13).
+\bibitem[Eisenberg et al (2014)]{closedtypefamilies}
+  Eisenberg, R. A., Vytiniotis, D., Peyton Jones, S., \& Weirich, S. (2014).
+  Closed type families with overlapping equations.
+  ACM SIGPLAN Notices, 49(1), 671-683.
+\bibitem[Ekblad, Claessen (2014)]{haste}
+  Ekblad, A., \& Claessen, K. (2014, September).
+  A seamless, client-centric programming model for type safe web applications.
+  In Proceedings of the 2014 ACM SIGPLAN symposium on Haskell (pp. 79-89). ACM.
+\bibitem[Epstein, Black, Peyton Jones (2011)]{cloudhaskell}
+  Epstein, J., Black, A. P., \& Peyton Jones, S. (2011, September).
+  Towards Haskell in the cloud.
+  In ACM SIGPLAN Notices (Vol. 46, No. 12, pp. 118-129). ACM.
+\bibitem[GHC User's Guide (2015)]{ghc710}
+  The GHC Team.
+  "The Glorious Glasgow Haskell Compilation System User’s Guide, Version 7.10.1",
+  pp. 256-257.
+  Available from \url{http://www.haskell.org/ghc/docs/7.10.1/users_guide.pdf},
+  2015-04-01.
+\bibitem[The Haste language website (2015)]{haste-lang.org}
+  The Haste language website.
+  Available from \url{http://haste-lang.org}, 2015-05-14.
+\bibitem[Mainland (2007)]{quasiquotes}
+  Mainland, G. (2007, September).
+  Why it's nice to be quoted: quasiquoting for haskell.
+  In Proceedings of the ACM SIGPLAN workshop on Haskell workshop (pp. 73-82).
+  ACM.
+\bibitem[Magalhães, Dijkstra, Jeuring, Löh (2010)]{generics}
+  Magalhães, J. P., Dijkstra, A., Jeuring, J., \& Löh, A. (2010).
+  A generic deriving mechanism for Haskell.
+  In Haskell 2010, Baltimore, MD, USA, 30 September 2010, pages 37–48. ACM, 2010.
+\bibitem[Nazarov, Mackenzie, Stegeman (2015)]{ghcjs}
+  Nazarov, V., Mackenzie, H., \& Stegeman, L.
+  "GHCJS Haskell to JavaScript Compiler".
+  Available from \url{https://github.com/ghcjs/ghcjs}, (2014-05-14).
+\bibitem[Peyton Jones, Tolmach, Hoare (2001)]{rewriterules}
+  Jones Peyton, S., Tolmach, A., \& Hoare, T. (2001, September).
+  Playing by the rules: rewriting as a practical optimisation technique in GHC.
+  In Haskell workshop (Vol. 1, pp. 203-233).
+\bibitem[Reid (1994)]{stableptr}
+  Reid, A. (1994, September).
+  Malloc pointers and stable pointers: Improving Haskell's foreign language
+  interface.
+  In Glasgow Functional Programming Workshop Draft Proceedings, Ayr, Scotland.
+\bibitem[Yakeley, 2014]{time}
+  Yakeley, A.
+  The \emph{time} package.
+  Available from \url{from http://hackage.haskell.org/package/time}, 2015-04-01.
+
+\end{thebibliography}
+
+
+\end{document}

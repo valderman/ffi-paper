@@ -1,0 +1,89 @@
+\usepackage{natbib}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage[utf8]{inputenc}
+\usepackage{parskip}
+\usepackage{color}
+\usepackage{url}
+\usepackage{enumerate}  % Needed by Pandoc
+
+\theoremstyle{definition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{definition}{Definition}
+
+\newif\ifbeamer
+%\beamertrue % Uncomment when using Beamer
+
+\newif\iflsthaskell
+\lsthaskelltrue % Uncomment when using listings and Haskell
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\ifbeamer
+
+  \setbeamertemplate{blocks}[rounded][shadow=true]
+  \setbeamercolor{block body}{bg=black!17}
+  \hypersetup{colorlinks,linkcolor=blue,anchorcolor=blue,citecolor=blue,filecolor=blue,urlcolor=blue}
+
+\else
+
+  %\usepackage[colorlinks,linkcolor=blue,anchorcolor=blue,citecolor=blue,filecolor=blue,linkcolor=blue,urlcolor=blue]{hyperref}
+  \urlstyle{sf}
+
+\fi
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\definecolor{haskell_frameColor}{rgb}{0.75,0.75,0.75}
+\definecolor{haskell_codeColor}{rgb}{0.86,0.85,0.89}
+
+\iflsthaskell
+  \input{lsthaskell}
+
+  \ifbeamer
+
+    \lstset{
+        basicstyle=\fontsize{8}{10}\fontencoding{T1}\ttfamily,
+        breaklines=false,
+        breakatwhitespace=false,
+        xleftmargin=0.3em,
+        keepspaces=true,
+        % columns=flexible,
+        showstringspaces=false,
+        frame=single,
+        rulecolor=\color{haskell_frameColor},
+        backgroundcolor=\color{haskell_codeColor}
+    }
+
+  \else
+
+    \lstset{
+        basicstyle=\fontsize{8}{10}\fontencoding{T1}\ttfamily,
+        breaklines=false,
+        breakatwhitespace=false,
+        xleftmargin=0.9em,
+        keepspaces=true,
+        % columns=flexible,
+        showstringspaces=false
+    }
+
+  \fi
+\fi
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newcommand{\ignore}[1]{}
+
+\newcommand{\todo}[1]{~\newline\textcolor{red}{\underline{TODO}: {\em #1}}\newline}
+
+\lstdefinelanguage{JavaScript}{
+  keywords={break, case, catch, continue, debugger, default, delete, do, else, finally, for, function, if, in, instanceof, new, return, switch, this, throw, try, typeof, var, void, while, with},
+  morecomment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  morestring=[b]',
+  morestring=[b]",
+  sensitive=true
+}
