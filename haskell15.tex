@@ -1127,35 +1127,6 @@ the \lstinline!ToAny! class.
         Tree d  -> mkDict d
 \end{code}
 
-This allows any type with a \lstinline!Generic! instance to automatically
-instantiate \lstinline!ToAny!, enabling us to write code like that in figure
-\ref{lst:generic-toany}.
-
-\begin{listingfloat}
-  \begin{code}
-    > data User = User
-    >   { name  :: String,
-    >   , email :: String,
-    >   , age   :: Int}
-    >   deriving Generic
-    > instance ToAny User
-
-    > printAny :: ToAny a => a -> IO ()
-    > printAny = host "x => {console.log(x.toString());}"
-    
-    > printAny $ User
-    >    { name  = "John Doe"
-    >    , email = "johndoe@example.com"
-    >    , age   = 32}
-
-    {'name'  : 'John Doe',
-     'email' : 'johndoe@example.com',
-     'age'   : 32}
-  \end{code}
-\caption{Generic marshalling in action}
-\label{lst:generic-toany}
-\end{listingfloat}
-
 \section{Performance}
 \label{sec:performance}
 It must be said, that performance is not a significant motivator for this work.
