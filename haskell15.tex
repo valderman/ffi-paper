@@ -985,7 +985,8 @@ to make pure functions an instance of \lstinline!Exportable!.
     type Host (IO a)   = IO HostAny
     type Host a        = HostAny
 
-  instance (ToAny a, Host a ~ HostAny) => HostFun a where
+  instance (ToAny a, Host a ~ HostAny) =>
+            HostFun a where
     mkHostFun = toAny
 
   instance (FromAny a, Exportable b) =>
@@ -1412,7 +1413,8 @@ dialects as possible.
 
 \paragraph{Idris: host-parametric FFI}
 \emph{Idris} is a dependently typed, Haskell-like language with backends for
-several host environments, JavaScript being one of them.\ \cite{idris}
+several host environments,\\
+JavaScript being one of them.\ \cite{idris}
 Like Haskell, Idris features monadic IO, but unlike Haskell, Idris' IO monad
 \emph{is}, in a sense its foreign function interface.
 IO computations are constructed from primitive building blocks, imported using
