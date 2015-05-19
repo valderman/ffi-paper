@@ -166,13 +166,14 @@ to write high level code like that in figure \ref{lst:good-ffi}.
       secs  :: Word,
       usecs :: Word
     } deriving Generic
+
   instance FromAny UTCTime
 
   getCurrentTime :: IO UTCTime
   getCurrentTime =
-  host "() => {var ms = new Date().getTime();
-              \\return {secs:  Math.trunc(ms/1000),\\
-              \\        usecs: (ms % 1000)*1000};}"
+    host "() => {var ms = new Date().getTime();
+                \\return {secs:  Math.trunc(ms/1000),\\
+                \\        usecs: (ms % 1000)*1000};}"
 \end{code}
 \caption{The desired state of foreign imports}
 \label{lst:good-ffi}
