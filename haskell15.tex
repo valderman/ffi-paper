@@ -147,18 +147,23 @@ hosted Haskell dialect:
 
 \begin{itemize}
 \item
-  It should automatically take care of marshalling for any types where
+  The FFI should automatically take care of marshalling for any types where
   marshalling is defined, without extra conversions or other boilerplate code.
 \item
   Users should be able to easily define their own marshalling schemes for
   arbitrary types.
 \item
-  It should allow importing arbitrary host language code, not just named,
+  The FFI should allow importing arbitrary host language code, not just named,
   statically known functions.
+\item
+  Finally, the FFI should be easy to implement and understand, ideally being
+  implementable as a library portable across Haskell dialects and host
+  languages.
 \end{itemize}
 
 Making this list a bit more concrete in the form of an example, we would like
-to write high level code like that in figure \ref{lst:good-ffi}.
+to write high level code like that in figure \ref{lst:good-ffi}, without
+having to make intrusive changes to our Haskell compiler.
 
 \begin{listingfloat}
 \begin{code}
@@ -195,6 +200,11 @@ Contrasting this with the standard FFI code from figure \ref{lst:bad-ffi}:
   We no longer need to take the long way around with external header
   files and named, statically known functions.
 \end{itemize}
+
+As all languages have some manner of interfacing with foreign code, there
+already exists a large body of work in this problem domain. However, as
+discussed in section \ref{sec:related}, current solutions all fall short of
+the criteria presented here in some way.
 
 \paragraph{A note on ``hosted'' Haskell}
 Every programming language is in some sense hosted, where ``hosting'' refers
@@ -236,8 +246,8 @@ alleviated by reaching outside the confines of Haskell '98.
 In section \ref{sec:extensions} we show the flexibility of our design by using
 it to implement marshalling of functions between the host and guest language,
 and use the GHC generics extension to implement a default marshalling behavior
-for any Haskell type. We also show how to lift the requirement that the host
-language supports dynamic code evaluation at runtime and with a slight
+for any Haskell type. We also discuss how to lift the requirement that the host
+language supports dynamic code evaluation at runtime with a slight
 modification to the Haskell compiler in use.
 
 For clarity and consistency, we will be using the ECMAScript 6
@@ -1250,7 +1260,7 @@ is in free to write an \lstinline!UnsafeDouble! wrapper with an appropriately
 fast and loose \lstinline!FromAny! instance to sidestep the (hopefully)
 unnecessary safety measures.
 
-\section{Limitations}\label{sec:discussion}
+\section{Discussion}\label{sec:discussion}
 While two of the tree main limitations our interface places on its host
 language - the presence of a dynamic code evaluation construct and support for
 first class functions - have hopefully been adequately explained, and their
@@ -1387,7 +1397,7 @@ much difficulty using a construct dubbed the ``poor man's concurrency monad''
 multitasking with blocking synchronization variables in non-concurrent
 environments.
 
-\section{Related work}\label{sec:related}
+\subsection{Related work}\label{sec:related}
 Aside from the vanilla foreign function interface used as the basis of our
 interface, there are several different, more modern, takes on interfacing
 purely functional languages with host language code.
@@ -1485,7 +1495,8 @@ required, but implementations need to be able to parse the host language as
 well. A price in implementation effort that may not always be worth the extra
 expressive power it buys.
 
-\subsection{Future work}
+\section{Conclusions and future work}
+\label{sec:conclusion}
 By combining two optimizations given in section \ref{sec:optimizations},
 the restriction of our \lstinline!host_safe! function to only accept statically
 known strings and the elimination of calls to \lstinline!eval! for statically
@@ -1516,8 +1527,6 @@ as C-based host environments are still by far the most common for Haskell
 programs. It may thus be worthwhile to investigate the compromises needed
 to lift the garbage collection requirement from potential host environments.
 
-\section{Conclusions}
-\label{sec:conclusion}
 We have presented the design of a novel, portable and platform agnostic foreign
 function interface for hosted Haskell dialects. We have also given a number of
 optimizations, improving the performance and safety of our interface
