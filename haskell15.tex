@@ -681,10 +681,15 @@ first incarnation described in\ \cite{cloudhaskell}, introduces the
 expression which is not known at compile time into a \lstinline!StaticPtr!
 yields a compiler error.
 
-Implementing a \lstinline!safe_host! function which can not be used to execute
-user-provided code becomes quite easy using this extension and the basic
-\lstinline!host! function described in section \ref{sec:interface},
-at the cost of slightly more inconvenient import syntax:
+Implementing a \lstinline!safe_host! function
+\footnote{
+  \lstinline!safe_host! function is currently \emph{not} included in our
+  reference implementation, as our work to port the Haste compiler it uses to
+  GHC 7.10 is still in progress.
+}
+which can not be used to execute user-provided code becomes quite easy using
+this extension and the basic \lstinline!host! function described in section
+\ref{sec:interface}, at the cost of slightly more inconvenient import syntax:
 
 \begin{code}
   safe_host :: Import f => StaticPtr HostString -> f
@@ -694,11 +699,6 @@ at the cost of slightly more inconvenient import syntax:
   safe_hello = safe_host $
     static "() => alert('Hello, world!')"
 \end{code}
-
-Note that unlike the basic interface, the \lstinline!safe_host!
-function is currently \emph{not} included in our reference implementation,
-as the Haste compiler it builds on does not yet support this language
-extension.
 
 \subsection{Eliminating \lstinline!eval!}
 \label{sec:inline-eval}
