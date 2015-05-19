@@ -1138,7 +1138,7 @@ the \lstinline!ToAny! class.
         Tree d  -> mkDict d
 \end{code}
 
-\section{Performance}
+\subsection{Performance}
 \label{sec:performance}
 It must be said, that performance is not a significant motivator for this work.
 High level features oftentimes come at the price of decreased performance,
@@ -1185,11 +1185,11 @@ FFI.
   \begin{center}
     \begin{tabular}{|r|c|l|}
       \hline
-                       & Tight loop & Loose loop \\
+                                   & Tight loop & High level code \\
       \hline
-      Without incoming & 0.85       & 1.33 \\
+      Outbound marshalling only    & 0.85       & 1.33 \\
       \hline
-      With incoming    & 14.52      & 1.76 \\
+      In- and outbound marshalling & 14.52      & 1.76 \\
       \hline
     \end{tabular}
   \end{center}
@@ -1497,6 +1497,7 @@ expressive power it buys.
 
 \section{Conclusions and future work}
 \label{sec:conclusion}
+\paragraph{Future work}
 By combining two optimizations given in section \ref{sec:optimizations},
 the restriction of our \lstinline!host_safe! function to only accept statically
 known strings and the elimination of calls to \lstinline!eval! for statically
@@ -1527,6 +1528,7 @@ as C-based host environments are still by far the most common for Haskell
 programs. It may thus be worthwhile to investigate the compromises needed
 to lift the garbage collection requirement from potential host environments.
 
+\paragraph{Conclusions}
 We have presented the design of a novel, portable and platform agnostic foreign
 function interface for hosted Haskell dialects. We have also given a number of
 optimizations, improving the performance and safety of our interface
@@ -1543,6 +1545,25 @@ targeting low level, C-like environments, it brings significant reductions in
 boilerplate code and complexity for users needing to interface their Haskell
 programs with their corresponding host environment in the space where it
 \emph{is} applicable: Haskell implementations for high level target platforms.
+
+But what have we really gained, in practice?
+As an illustration, we have used our library to implement JavaScript
+\emph{animation frames} for the Haste compiler,
+a mechanism whereby a user program may request the browser to call a certain
+function before the next repaint of the screen occurs;
+the resulting implementation is refreshingly boring and, above all, simple.
+
+\begin{code}
+  type Time = Double
+  newtype FrameHandle = FrameHandle JSAny
+    deriving (ToAny, FromAny)
+
+  requestFrame :: (Time -> IO ()) -> IO RequestHandle
+  requestFrame = host "window.requestAnimationFrame"
+
+  cancelFrame :: FrameHandle -> IO ()
+  cancelFrame = host "window.cancelAnimationFrame"
+\end{code}
 
 The library is shipped in both source code and binary form as part of the
 Haste distribution, available from the Haste Language website
