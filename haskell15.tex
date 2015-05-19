@@ -433,7 +433,8 @@ and \lstinline!getMember!, as shown in figure \ref{lst:dicts}.
     mapM_ (\k v -> set d (toHostString k) v) xs
     return d
     
-  getMember :: FromAny a => HostAny -> String -> IO (Maybe a)
+  getMember :: FromAny a
+            => HostAny -> String -> IO (Maybe a)
   getMember dict key = do
     let key' = toHostString key
     has_key <- dict `has` key'
@@ -466,7 +467,8 @@ of our marshalling function and the evaluation of the resulting thunk.
   instance (ToAny a, ToAny b) => ToAny (a, b) where
     toAny (a, b) = toAny [toAny a, toAny b]
 
-  instance (FromAny a, FromAny b) => FromAny (a, b) where
+  instance (FromAny a, FromAny b) =>
+           FromAny (a, b) where
     fromAny x = do
       [a, b] <- fromAny x
       a' <- fromAny a
@@ -520,7 +522,7 @@ with polymorphic arguments and return values in the \lstinline!IO! monad.
 \begin{listingfloat}
 \begin{code}
   logError :: String -> IO ()
-  logError = host "e => {console.error('Oops: ' + e);}"
+  logError = host "e => {console.error('Oops: '+e);}"
 \end{code}
 \caption{Example of an imported function}
 \label{lst:importexample}
@@ -647,12 +649,12 @@ the one given in \ref{sec:interface}.
   instance FromAny a => Import (IO a) where
     host = host'
   
-  foreign import ccall
-    apply0 :: HostFun -> IO HostAny
-  foreign import ccall
-    apply1 :: HostFun -> HostAny -> IO HostAny
-  foreign import ccall
-    apply2 :: HostFun -> HostAny -> HostAny -> IO HostAny
+  foreign import ccall apply0 ::
+    HostFun -> IO HostAny
+  foreign import ccall apply1 ::
+    HostFun -> HostAny -> IO HostAny
+  foreign import ccall apply2 ::
+    HostFun -> HostAny -> HostAny -> IO HostAny
   ...
   
   {-# RULES
@@ -881,7 +883,7 @@ a matter of composing our building blocks together.
     mkHostFun = fmap toAny
 
   instance (FromAny a, Exportable b) =>
-           Exportable (a -> b) where
+            Exportable (a -> b) where
     mkHostFun f =
       mkHostFun . f . unsafePerformIO . fromAny
   
@@ -986,7 +988,8 @@ to make pure functions an instance of \lstinline!Exportable!.
   instance (ToAny a, Host a ~ HostAny) => HostFun a where
     mkHostFun = toAny
 
-  instance (FromAny a, Exportable b) => ToAny (a -> b) where
+  instance (FromAny a, Exportable b) =>
+            ToAny (a -> b) where
     {-# NOINLINE toAny #-}
     toAny = unsafePerformIO . hsfun_to_host
 
@@ -1091,7 +1094,7 @@ of its type argument.
   \item
     \lstinline!c'! is a nonempty \emph{list} or a \emph{single item},
     we return a new dictionary consisting of the constructor tag and the
-    \lstinline!HostAny! encoding of \lstinline!c'!:
+    \lstinline!HostAny! encoding of \lstinline!c'!:\\
     \lstinline!Tree [("tag", toAny n), ("data", toAny c')]!.
   \end{itemize}
 \item
@@ -1558,7 +1561,7 @@ the resulting implementation is refreshingly boring and, above all, simple.
   newtype FrameHandle = FrameHandle JSAny
     deriving (ToAny, FromAny)
 
-  requestFrame :: (Time -> IO ()) -> IO RequestHandle
+  requestFrame :: (Time -> IO ()) -> IO FrameHandle
   requestFrame = host "window.requestAnimationFrame"
 
   cancelFrame :: FrameHandle -> IO ()
@@ -1570,7 +1573,7 @@ Haste distribution, available from the Haste Language website
 at\ \cite{haste-lang.org}.
 
 \acks
-This work has been partially funded by the Swedish Foundation for Strategic Research, under grant RAWFP. Additional thanks to Koen Claessen, Emil Axelsson and Atze van der Ploeg for their valuable feedback and comments.
+This work has been partially funded by the Swedish Foundation for Strategic Research, under grant RAWFP. Many thanks to Koen Claessen, Emil Axelsson and Atze van der Ploeg for their valuable feedback and comments.
 
 % We recommend abbrvnat bibliography style.
 
