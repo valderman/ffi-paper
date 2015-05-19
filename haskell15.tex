@@ -1141,7 +1141,7 @@ instantiate \lstinline!ToAny!, enabling us to write code like that in figure
     > instance ToAny User
 
     > printAny :: ToAny a => a -> IO ()
-    > printAny = ffi "x => {console.log(x.toString());}"
+    > printAny = host "x => {console.log(x.toString());}"
     
     > printAny $ User
     >    { name  = "John Doe"
@@ -1515,7 +1515,7 @@ expressive power it buys.
 
 \subsection{Future work}
 By combining two optimizations given in section \ref{sec:optimizations},
-the restriction of our \lstinline!ffi_safe! function to only accept statically
+the restriction of our \lstinline!host_safe! function to only accept statically
 known strings and the elimination of calls to \lstinline!eval! for statically
 known strings, it is possible to lift the restriction that our host language
 support dynamic code evaluation: if all foreign imports are statically known,
