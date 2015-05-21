@@ -133,8 +133,8 @@ interface. But is this really the best we can do?
 
 When the world we are interfacing with uses C as its lingua franca, then the
 FFI may be quite enough. However, Haskell does not only compile to
-traditional C-based architectures, but to higher level environments - most
-prominently JavaScript - as well. In writing this paper, we seek to liberate
+traditional C-based architectures, but to higher level environments --- most
+prominently JavaScript --- as well. In writing this paper, we seek to liberate
 Haskell code targeting JavaScript and similar high level platforms from the
 shackles of the low level Foreign Function Interface traditionally used to
 interface Haskell with C.
@@ -313,7 +313,7 @@ cope with:
   boilerplate code.
 \item
   The FFI only lets us import named external functions, but our high level
-  host language may support higher order functions - it would be nice to be able
+  host language may support higher order functions: it would be nice to be able
   to take advantage of this fact.
 \end{itemize}
 
@@ -613,10 +613,10 @@ feature complete, its non-functional properties can be improved quite a bit
 if we allow ourselves to stray from the tried and true, but slightly
 conservative, path of pure Haskell '98.
 
-Aside from implementation specific tricks - exploiting knowledge about a
+Aside from implementation specific tricks --- exploiting knowledge about a
 particular compiler's data representation to optimize marshalling, or even
 completely unroll and eliminate some of the basic interface's primitive
-operations, for instance - there are several general optimizations we can
+operations, for instance --- there are several general optimizations we can
 apply to significantly enhance the performance and safety of our interface.
 
 \subsection{Eliminating argument passing overheads}
@@ -736,7 +736,7 @@ As discussed in section \ref{sec:performance}, this effect is very much in
 evidence when targeting the widely used V8 JavaScript engine.
 
 In the case of JavaScript, it is quite common to run programs through a
-\emph{minifier} - a static optimizer with focus on code size - before
+\emph{minifier} --- a static optimizer with focus on code size --- before
 deployment. Not only do such optimizers suffer the same analytical
 difficulties as the language runtime itself, but due to the heavy use of
 renaming often employed by minifiers to reduce code size, special care needs
@@ -850,8 +850,8 @@ arguments in the opposite direction. Essentially, we want to map
 While superficially similar to the implementation of the \lstinline!Import!
 class in section \ref{sec:import}, this task is surprisingly tricky:
 where \lstinline!Import! modifies an arbitrary number of arguments and
-performs some action with respect to a monomorphic value - the
-\lstinline!HostFun! representation of a host language function - we now need
+performs some action with respect to a monomorphic value --- the
+\lstinline!HostFun! representation of a host language function --- we now need
 to do the same to a variadic function.
 
 \paragraph{Modifying variadic functions using type families}
@@ -915,8 +915,8 @@ interface only admits importing functions in the \lstinline!IO! monad.
 Slightly more troubling is the use of \lstinline!unsafePerformIO! in
 conjunction with \lstinline!hsfun_to_host!.
 According to\ \cite{stableptr}, the creation of stable pointers residing in
-the \lstinline!IO! monad - the reason for \lstinline!hsfun_to_host! residing
-there as well - is to avoid accidentally duplicating the allocation of the
+the \lstinline!IO! monad --- the reason for \lstinline!hsfun_to_host! residing
+there as well --- is to avoid accidentally duplicating the allocation of the
 stable pointer, something we can avoid by telling the compiler to never
 inline the function, ever.
 
@@ -1042,8 +1042,8 @@ of writing that one line altogether. Thanks to generic programming and default
 type class instances, we can.
 
 Our implementation of generic marshalling uses GHC generics\ \cite{generics},
-and associated language extensions - most notably type operators and scoped
-type variables - making it specific to GHC-based compilers such as Haste and
+and associated language extensions --- most notably type operators and scoped
+type variables --- making it specific to GHC-based compilers such as Haste and
 GHCJS\ \cite{ghcjs}. GHC generics allows us to traverse values of any type
 as though the type was uniformly defined as a tree of sums, products,
 constants and metadata, such as record selectors or constructor names.
@@ -1230,8 +1230,8 @@ interface happily passes whatever value it gets back into Haskell as a double,
 potentially wreaking type-unsafe havoc when it turns out that the ``double''
 returned was actually an array of strings containing someone's shopping list.
 
-In contrast, our library ensures that what is claimed at the type level - that
-the value coming from the outside world is a \lstinline!Double! - is actually
+In contrast, our library ensures that what is claimed at the type level --- that
+the value coming from the outside world is a \lstinline!Double! --- is actually
 true, by passing the marshalled value to the JavaScript built-in function
 \lstinline!Number!. What this benchmark tells us is that checking if something
 is a number or not is roughly 14 times slower than just copying the same value.
@@ -1269,8 +1269,8 @@ unnecessary safety measures.
 
 \section{Discussion}\label{sec:discussion}
 While two of the tree main limitations our interface places on its host
-language - the presence of a dynamic code evaluation construct and support for
-first class functions - have hopefully been adequately explained, and their
+language --- the presence of a dynamic code evaluation construct and support for
+first class functions --- have hopefully been adequately explained, and their
 severity slightly alleviated, in sections \ref{sec:interface} and
 \ref{sec:inline-eval}, there are still several design choices and lingering
 limitations that may need further justification.
@@ -1294,9 +1294,9 @@ exception, informing the user ``out of band'' rather than by somehow threading
 an error value to the entire call.
 
 It is then simpler, not to mention more performant, to trust that the foreign
-code in question is well behaved - something we must do anyway since we
+code in question is well behaved --- something we must do anyway since we
 automatically rely on its correctness by allowing our program to depend upon
-it - and throw that exception immediately on conversion failure rather than
+it --- and throw that exception immediately on conversion failure rather than
 taking a detour via error values, should this trust prove to be misplaced.
 
 \subsection{Limitation to garbage collected host languages}
@@ -1307,14 +1307,14 @@ interfaces: ownership and eventual deallocation of memory.
 
 Our high level interface depends quite heavily on its target language being
 garbage collected, as having to manually manage memory introduces significant
-boilerplate code and complexity - the very things this interface aims to avoid.
+boilerplate code and complexity: the very things this interface aims to avoid.
 As target platforms \emph{with} garbage collections having to deal with low
 level details such as memory management is the core motivation for this work,
 rectifying this ``problem'' does not fall within the scope of this paper.
 
 Even so, memory management does rear its ugly head in section
 \ref{sec:marshalling-functions}, where stable pointers are used to pass data
-unchanged from Haskell into our host language, and promptly ignored - note
+unchanged from Haskell into our host language, and promptly ignored: note
 the complete absence of calls to \lstinline!freeStablePtr!. Implementing our
 interface for the Haste compiler, this is not an issue: Haste makes full use
 of JavaScript's garbage collection capabilities to turn stable pointers into
