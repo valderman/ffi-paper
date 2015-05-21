@@ -1560,7 +1560,7 @@ the resulting implementation is refreshingly boring and, above all, simple.
 
 \begin{code}
   type Time = Double
-  newtype FrameHandle = FrameHandle JSAny
+  newtype FrameHandle = FrameHandle HostAny
     deriving (ToAny, FromAny)
 
   requestFrame :: (Time -> IO ()) -> IO FrameHandle
