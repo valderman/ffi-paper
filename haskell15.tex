@@ -498,30 +498,55 @@ and \lstinline!getMember!, as shown in figure \ref{lst:dicts}.
     set :: HostAny -> HostString -> HostAny -> IO ()
   foreign import ccall
     get :: HostAny -> HostString -> IO HostAny
-  foreign import ccall
-    has :: HostAny -> HostString -> IO Bool
   
   mkDict :: [(String, HostAny)] -> HostAny
   mkDict xs = unsafePerformIO $ do
     d <- newDict
     mapM_ (\k v -> set d (toHostString k) v) xs
     return d
-    
-  getMember :: FromAny a
-            => HostAny -> String -> IO (Maybe a)
-  getMember dict key = do
-    let key' = toHostString key
-    has_key <- dict `has` key'
-    if has_key
-      then get dict key' >>= fmap Just . fromAny
-      else return Nothing
+
+  getMember :: FromAny a => HostAny -> String -> IO a
+  getMember dict key =
+    get dict (toHostString key) >>= fromAny
 \end{code}
-\caption{Reading and writing dictionaries}
+\caption{Dictionary manipulation}
 \label{lst:dicts}
 \end{listingfloat}
 
 This gives us the power to represent any composite or primitive data
-type with user-defined dictionary keys.
+type with user-defined dictionary keys. Figure \ref{lst:sumprod} shows a
+possible marshalling for sum and product types using the aforementioned
+dictionary operations.
+
+\begin{listingfloat}
+\begin{code}
+  instance (ToAny a, ToAny b) =>
+           ToAny (Either a b) where
+    toAny (Left a)  = mkDict [("tag",  toAny "left"),
+                              ("data", toAny a)]
+    toAny (Right b) = mkDict [("tag",  toAny "right"),
+                              ("data", toAny b)]
+
+  instance (FromAny a, FromAny b) =>
+           FromAny (Either a b) where
+    fromAny x = do
+      tag <- getMember x "tag"
+      case tag of
+        "left"  -> Left  <$> getMember "data"
+        "right" -> Right <$> getMember "data"
+
+  instance (ToAny a, ToAny b) => ToAny (a, b) where
+    toAny (a, b) = toAny [toAny a, toAny b]
+
+  instance (FromAny a, FromAny b) =>
+           FromAny (a, b) where
+    fromAny x = do
+      [a, b] <- fromAny x
+      (,) <$> fromAny a <*> fromAny b
+\end{code}
+\caption{Sums and products using lists and dictionaries}
+\label{lst:sumprod}
+\end{listingfloat}
 
 It is worth noting that the implementation of \lstinline!getMember! is
 the reason for \lstinline!fromAny! returning a value in the \lstinline!IO!
@@ -809,13 +834,11 @@ function \lstinline!hfsun_to_host!, to convert a Haskell function $f$ from $n$
 \lstinline!HostAny! arguments to a \lstinline!HostAny! return value $r$ in the
 IO monad into a host language function which, when applied to $n$ host
 language arguments, calls $f$ with those same arguments and returns the $r$
-returned by $f$.
-
+returned by $f$.\\
 \begin{code}
   foreign import ccall
     hsfun_to_host :: ??? -> HostFun
-\end{code}
-
+\end{code}\\
 But how can we make this function type check?
 As we are bound to the types the vanilla foreign function interface lets us
 marshal, we have no way of applying this function to a variadic Haskell
@@ -828,8 +851,7 @@ Fortunately, standard Haskell provides us with a way to do exactly what we want:
 \lstinline!StablePointer!s.\ \cite{stableptr} Note that, depending on the
 Haskell compiler in use, this use of stable pointers may introduce a space
 leak. This is discussed further in section \ref{sec:host-gc}, and an
-alternative solution is presented.
-
+alternative solution is presented.\\
 \begin{code}
   import Foreign.StablePtr
   import System.IO.Unsafe
@@ -840,8 +862,7 @@ alternative solution is presented.
   hsfun_to_host :: Exportable f => f -> IO HostFun
   hsfun_to_host f =
     hsfun_to_host' `fmap` newStablePtr (mkHostFun f)
-\end{code}
-
+\end{code}\\
 Just being able to pass functions to the host language is not enough: we still
 need to marshal return values from Haskell to our host language, and incoming
 arguments in the opposite direction. Essentially, we want to map
@@ -861,8 +882,7 @@ extension, closed type families\ \cite{closedtypefamilies}, to lend us the type
 level flexibility we need. We begin by defining the \lstinline!Exportable!
 type class first encountered in the type signature of \lstinline!hsfun_to_host!,
 and a closed type family describing the type level behavior of our function
-marshalling.
-
+marshalling.\\
 \begin{code}
   type family Host a where
     type Host (a -> b) = a -> Host b
@@ -870,8 +890,7 @@ marshalling.
 
   class Exportable f where
     mkHostFun :: f -> Host f
-\end{code}
-
+\end{code}\\
 This is relatively straightforward. Inspecting the \lstinline!Host! type
 family, we see that applying \lstinline!mkHostFun! to any eligible function
 must result in a corresponding function of the same arity, but with its
@@ -1057,15 +1076,13 @@ and the complete implementation is available from \cite{haste-lang.org}.
 
 We begin by defining a the data type to represent a host language value while
 it is being constructed. A value can be either a singleton, a list of
-values or a dictionary.
-
+values or a dictionary.\\
 \begin{code}
   data Value
     = One HostAny
     | List [HostAny]
     | Dict [(HostString, HostAny)]
-\end{code}
-
+\end{code}\\
 We then informally define the behavior of our generic marshalling function
 \lstinline!gToAny :: Rep a -> Value! as follows, where \lstinline!Rep! is
 a type provided by \lstinline!GHC.Generics! to enable generic traversal
@@ -1107,7 +1124,6 @@ of its type argument.
   we recursively marshal \lstinline!c1! and \lstinline!c2! into
   \lstinline!c1'! and \lstinline!c2'! respectively. We then \emph{merge}
   \lstinline!c1'! and \lstinline!c2'! and return the result:
-
   \begin{code}
     merge c1' c2'
       where
@@ -1116,8 +1132,7 @@ of its type argument.
         merge (One a) (List b)  = List (a : b)
         merge (List a) (List b) = List (a ++ b)
         merge (Tree a) (Tree b) = Tree (a ++ b)
-  \end{code}
-
+  \end{code}\\
   Note that the case where a tree is merged with a non-tree is undefined.
   Trees arise \emph{only} from a use of record selectors. Haskell only
   allows data constructors where either \emph{all} arguments have selectors,
@@ -1131,8 +1146,7 @@ of its type argument.
 \end{itemize}
 
 Using this implementation, all that remains is to add a default instance to
-the \lstinline!ToAny! class.
-
+the \lstinline!ToAny! class.\\
 \begin{code}
   class ToAny a where
     toAny :: a -> HostAny
@@ -1143,8 +1157,7 @@ the \lstinline!ToAny! class.
         One x   -> x
         List xs -> toAny xs
         Tree d  -> mkDict d
-\end{code}
-
+\end{code}\\
 \section{Performance}
 \label{sec:performance}
 It must be said, that performance is not a significant motivator for this work.
@@ -1327,8 +1340,7 @@ track of all the stable pointers we create.
 As the stable pointers in question are never dereferenced or otherwise
 used within Haskell, this hypothetical space leak can be eliminated by
 replacing stable pointers with a slight bit of unsafe, implementation-specific
-magic.
-
+magic.\\
 \begin{code}
   import Unsafe.Coerce
   import Foreign.StablePtr hiding (newStablePtr)
@@ -1338,8 +1350,7 @@ magic.
 
   newStablePtr :: a -> StablePtr
   newStablePtr = unsafeCoerce . fakeStablePtr
-\end{code}
-
+\end{code}\\
 The \lstinline!FakeStablePtr! type and the function by the same name are used
 to mimic the underlying structure of \lstinline!StablePtr!. This makes its
 exact implementation specific to the Haskell compiler in question, unlike
@@ -1347,14 +1358,12 @@ the ``proper'' solution based on actual stable pointers. The Haste
 compiler, being based on GHC, has a very straightforward representation for
 stable pointers, merely wrapping the ``machine'' level pointer in a single
 layer of indirection, giving us the following implementation of fake stable
-pointers:
-
+pointers:\\
 \begin{code}
   data FakeStablePtr a = Fake !a
-  
-  fakeStablePtr = Fake
-\end{code}
 
+  fakeStablePtr = Fake
+\end{code}\\
 Thus, we may choose our implementation strategy depending on the capabilities
 of our target compiler. For a single implementation targeting multiple
 platforms however, proper stable pointers are the safer solution.
@@ -1609,7 +1618,7 @@ This work has been partially funded by the Swedish Foundation for Strategic Rese
   Available from \url{http://fay-lang.org/}, 2015-05-15.
 \bibitem[The 2015 ECMAScript Language Specification, Rev. 38 (2015)]{es6}
   The 2015 ECMAScript Language Specification, Rev. 38, Final Draft.
-  Available from \url{http://wiki.ecmascript.org/lib/exe/fetch.php?id=harmony%3Aspecification_drafts&cache=cache&media=harmony:ecma-262_6th_edition_final_draft_-04-14-15.pdf},
+  Available from \url{http://tinyurl.com/es6draft},
   (2015-05-13).
 \bibitem[Eisenberg et al (2014)]{closedtypefamilies}
   Eisenberg, R. A., Vytiniotis, D., Peyton Jones, S., \& Weirich, S. (2014).
