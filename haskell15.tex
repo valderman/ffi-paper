@@ -446,54 +446,15 @@ and \lstinline!getMember!, as shown in figure \ref{lst:dicts}.
 \end{listingfloat}
 
 This gives us the power to represent any composite or primitive data
-type. To give an intuition of the interface's use, figure
-\ref{lst:tuplemaybeinstances} gives possible \lstinline!ToAny! and
-\lstinline!FromAny! instances for tuples and the \lstinline!Maybe! type.
-Note how \lstinline!Maybe a! is represented in the host language as a
-dictionary which is either {\tt \{"tag": "nothing"\}} or
-{\tt \{"tag": "something", "data": a\}}.
+type with user-defined dictionary keys.
 
-It is also worth noting that the implementation of \lstinline!getMember! is
+It is worth noting that the implementation of \lstinline!getMember! is
 the reason for \lstinline!fromAny! returning a value in the \lstinline!IO!
 monad: foreign data structures are rarely, if ever, guaranteed to be immutable
 and looking up a key in a dictionary is effectively dereferencing a reference,
 so we must perform any such lookups at a well defined point in time,
 lest we run the risk of the value being changed in between the application
 of our marshalling function and the evaluation of the resulting thunk.
-
-\begin{listingfloat}
-\begin{code}
-  instance (ToAny a, ToAny b) => ToAny (a, b) where
-    toAny (a, b) = toAny [toAny a, toAny b]
-
-  instance (FromAny a, FromAny b) =>
-           FromAny (a, b) where
-    fromAny x = do
-      [a, b] <- fromAny x
-      a' <- fromAny a
-      b' <- fromAny b
-      return (a', b')
-
-  instance ToAny a => ToAny (Maybe a) where
-    toAny (Just x) =
-      mkDict [("tag",  toAny "something"),
-              ("data", toAny x)]
-    toAny Nothing =
-      mkDict [("tag",  toAny "nothing")]
-
-  instance FromAny a => FromAny (Maybe a) where
-    fromAny x = do
-      tag <- getMember x "tag"
-      case tag of
-        Just "something" -> getMember x "data"
-        Just _           -> return Nothing
-        Nothing          -> error "Not Maybe!"
-\end{code}
-\caption{Possible instances for tuples and \lstinline!Maybe!}
-\label{lst:tuplemaybeinstances}
-\end{listingfloat}
-
-With this, we are ready to tackle the actual importing of functions.
 
 \subsection{Importing functions}\label{sec:import}
 
