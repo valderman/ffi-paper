@@ -325,7 +325,7 @@ When working in a hosted Haskell dialect, we ought to be able to do better
 than this: bound no more by the fetters of C, hosted Haskell should be able
 to interface with its host language in a less verbose and more flexible manner.
 
-\section{A New Interface}\label{sec:interface}
+\section{A Better FFI}\label{sec:interface}
 Our interface is based on the idea that the entirety of an interaction with the
 host environment need not be an atomic operation. Rather, we attempt to break
 foreign calls down into its constituent parts: marshalling arguments into the
@@ -334,20 +334,36 @@ results back into Haskell. We implement these parts in Haskell itself to the
 extent possible, only reaching out to the host environment when it is clear
 that a task is impossible to perform within the confines of Haskell.
 
-\subsection{Crossing the Rift}
+\subsection{The interface}
 As the main purpose of a foreign interface is to shovel data back and
 forth through a rift spanning two separate programming worlds, it makes sense
-to begin the design of any such interface with one central question:
+to begin the description of any such interface with one central question:
 what data can pass through the rift and come out on the other side still making
 sense?
 
-In our method, the class of data fulfilling this criterion is embodied in the
+The class of data fulfilling this criterion is embodied in an
 abstract \lstinline!HostAny! data type, inhabited by host language-native
 representations of arbitrary Haskell values.
 A data type is then considered to be marshallable if and only if it can be
 converted to and/or from \lstinline!HostAny!.
-We express this notion using two appropriately named type classes.
 
+Having established the class of types that can be marshalled, we can now give
+a meaningful definition of \emph{importable} functions: a function can be
+imported from the host language into our Haskell program if and only if:
+\begin{itemize}
+\item
+  all of its argument types are convertible into \lstinline!HostAny!;
+\item
+  its return type is convertible \emph{from} the host-native
+  \lstinline!HostAny!; and
+\item
+  its return type resides in the \lstinline!IO! monad, accounting for the
+  possibility of side effects in host language functions.
+\end{itemize}
+The Haskell embodiment of these properties making up our interface is given in
+figure \ref{lst:interface}.
+
+\begin{listingfloat}
 \begin{code}
   type HostAny
 
@@ -356,20 +372,70 @@ We express this notion using two appropriately named type classes.
 
   class FromAny a where
     fromAny :: HostAny -> IO a
+
+  class Import f
+  instance (ToAny a, Import b) => Import (a -> b)
+  instance FromAny a           => Import (IO a)
+
+  host :: Import f => String -> f
 \end{code}
+\caption{The programmer's view of our library}
+\label{lst:interface}
+\end{listingfloat}
 
-We might find a \lstinline!HostAny! instance for \lstinline!ToAny!
-and \lstinline!FromAny! handy. Of course, \lstinline!HostAny! already being
-in its host language representation form, the instances are trivial.
+Coupled with the base case \lstinline!ToAny! and \lstinline!FromAny! instances
+given in sections \ref{sec:marshalling} and \ref{sec:extensions}, this
+interface gives a simple workflow for interacting with host language code:
+\begin{itemize}
+\item
+  define the appropriate \lstinline!ToAny! and \lstinline!FromAny! instances
+  for your types, either through the generic default instances given in section
+  \ref{sec:default-instances} as showcased by our motivating example in figure
+  \ref{lst:good-ffi}, or by defining them manually with the dictionary
+  manipulation primitives given in section \ref{sec:marshalling} if a
+  particular host language representation is desired; then
+\item
+  import arbitrary host language symbols or expressions over
+  those types using the \lstinline!host! function.
+\end{itemize}
 
+To illustrate how this interface can be used to effortlessly import even
+complex foreign code, we have used our library to
+implement bindings to JavaScript \emph{animation frames} for the Haste
+compiler, a mechanism whereby a user program may request the browser to call
+a certain function before the next repaint of the screen occurs.
+
+\begin{listingfloat}
 \begin{code}
-  instance ToAny HostAny where toAny = id
-  instance FromAny HostAny where FromAny = return
-\end{code}
+  type Time = Double
+  newtype FrameHandle = FrameHandle HostAny
+    deriving (ToAny, FromAny)
 
-We must then provide some means to convert values of primitive types to their
-host language representation. This is a simple proposition, as this is the
-forte of the vanilla foreign function interface.
+  requestFrame :: (Time -> IO ()) -> IO FrameHandle
+  requestFrame = host "window.requestAnimationFrame"
+
+  cancelFrame :: FrameHandle -> IO ()
+  cancelFrame = host "window.cancelAnimationFrame"
+\end{code}
+\caption{Importing higher order functions}
+\label{lst:frames}
+\end{listingfloat}
+
+The resulting code, given in figure \ref{lst:frames}, is straightforward and
+simple, even though it performs the rather non-trivial task of importing a
+higher order function, automatically
+converting user-provided Haskell callbacks to their JavaScript equivalents.
+
+In the rest of this section, we give an implementation of this interface for
+the Haste compiler.
+
+\subsection{Implementing marshalling}\label{sec:marshalling}
+As usual in the functional world, we ought to start with the \emph{base case}:
+implementing marshalling for the basic primitive types that lie at the bottom
+of every data structure.
+
+This is a simple proposition, as this is the forte of the vanilla foreign
+function interface.
 
 \begin{code}
   foreign import ccall intToAny :: Int -> HostAny
@@ -378,6 +444,15 @@ forte of the vanilla foreign function interface.
   instance ToAny Int where toAny = intToAny
   instance FromAny Int where fromAny = anyToInt
   ...
+\end{code}
+
+We might also find a \lstinline!HostAny! instance for \lstinline!ToAny!
+and \lstinline!FromAny! handy. Of course, \lstinline!HostAny! already being
+in its host language representation form, the instances are trivial.
+
+\begin{code}
+  instance ToAny HostAny where toAny = id
+  instance FromAny HostAny where FromAny = return
 \end{code}
 
 However, if passing simple values was all we wanted to do, then there would be
@@ -457,41 +532,8 @@ lest we run the risk of the value being changed in between the application
 of our marshalling function and the evaluation of the resulting thunk.
 
 \subsection{Importing functions}\label{sec:import}
-
-Making an effort to keep our interface as simple as possible, we would very
-much like to be able to import functions using a single function.
-However, imported functions should also be usable without any extra
-scaffolding; what type should such a function have?
-Since we want to be able to import functions of just about any type, it clearly
-needs to be polymorphic. Said functions live in the effectful world of our
-host language, so the imported functions should live in the \lstinline!IO!
-monad in the interest of safety. We want to be able to import functions of any
-arity, so it also needs to be variadic. Finally, we also need to specify the
-host code to import somehow.
-
-After some contemplation, we come up with the following type, with instances of
-the \lstinline!Import! class fulfilling the above criteria: variadic functions
-with polymorphic arguments and return values in the \lstinline!IO! monad.
-
-\begin{code}
-  class Import f
-
-  host :: Import f => String -> f
-\end{code}
-
-\begin{listingfloat}
-\begin{code}
-  logError :: String -> IO ()
-  logError = host "e => {console.error('Oops: '+e);}"
-\end{code}
-\caption{Example of an imported function}
-\label{lst:importexample}
-\end{listingfloat}
-
-This will let us write import declarations like in figure
-\ref{lst:importexample}, creating proper Haskell functions from strings of
-host language code.
-
+Implementing our \lstinline!host! function turns out to be slightly trickier
+than marshalling data between environments.
 The types of our imported functions need to differ depending on the arity of
 the imported host language code. This necessitates \lstinline!host! returning
 some variadic function. Fortunately, there is a well known trick to accomplish
@@ -553,7 +595,7 @@ function \lstinline!toHostString :: String -> HostString!.
   foreign import ccall
     eval :: HostString -> HostFun
 
-  host :: Import f => HostString -> f
+  host :: Import f => String -> f
   host s = imp0rt f []
     where
       f = eval (toHostString s)
@@ -666,7 +708,7 @@ this extension and the basic \lstinline!host! function described in section
 \ref{sec:interface}, at the cost of slightly more inconvenient import syntax:
 
 \begin{code}
-  safe_host :: Import f => StaticPtr HostString -> f
+  safe_host :: Import f => StaticPtr String -> f
   safe_host = host . deRefStaticPtr
 
   safe_hello :: IO ()
@@ -1512,27 +1554,8 @@ boilerplate code and complexity for users needing to interface their Haskell
 programs with their corresponding host environment in the space where it
 \emph{is} applicable: Haskell implementations for high level target platforms.
 
-But what have we really gained, in practice?
-As an illustration, we have used our library to implement JavaScript
-\emph{animation frames} for the Haste compiler,
-a mechanism whereby a user program may request the browser to call a certain
-function before the next repaint of the screen occurs;
-the resulting implementation is refreshingly boring and, above all, simple.
-
-\begin{code}
-  type Time = Double
-  newtype FrameHandle = FrameHandle HostAny
-    deriving (ToAny, FromAny)
-
-  requestFrame :: (Time -> IO ()) -> IO FrameHandle
-  requestFrame = host "window.requestAnimationFrame"
-
-  cancelFrame :: FrameHandle -> IO ()
-  cancelFrame = host "window.cancelAnimationFrame"
-\end{code}
-
-The library is shipped in both source code and binary form as part of the
-Haste distribution, available from the Haste Language website
+Our reference implementation is shipped in both source code and binary form as
+part of the Haste distribution, available from the Haste Language website
 at\ \cite{haste-lang.org}.
 
 \acks
