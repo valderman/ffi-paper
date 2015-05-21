@@ -541,7 +541,8 @@ the function in question has been fully applied.
 In the case of the \lstinline!host! function, that computation would be
 applying a foreign function to said list of arguments.
 
-This suggests the following class definition:
+This suggests the following class definition. As \lstinline!import! is a
+reserved keyword, we have to make do with an alternate spelling.
 
 \begin{code}
   type HostFun = HostAny
