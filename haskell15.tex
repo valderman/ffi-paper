@@ -349,8 +349,7 @@ converted to and/or from \lstinline!HostAny!.
 We express this notion using two appropriately named type classes.
 
 \begin{code}
-  data Any
-  type HostAny = Ptr Any
+  type HostAny
 
   class ToAny a where
     toAny :: a -> HostAny
