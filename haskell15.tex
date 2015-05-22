@@ -1376,7 +1376,7 @@ us as a shining example of safe API design.
 \subsection{Continuation-based blocking in non-concurrent environments}
 A particularly neat feature of the foreign function interface employed by the
 GHCJS compiler is the ability for foreign host code to suspend execution while
-waiting for an even to occur, even though its JavaScript host environment is
+waiting for an event to occur, even though its JavaScript host environment is
 devoid of any concurrency support.\ \cite{ghcjs}
 This is accomplished by giving imported functions an extra parameter:
 a continuation to be called upon completion
@@ -1498,7 +1498,7 @@ expressive power it buys.
 \label{sec:conclusion}
 \paragraph{Future work}
 By combining two optimizations given in section \ref{sec:optimizations},
-the restriction of our \lstinline!host_safe! function to only accept statically
+the restriction of our \lstinline!safe_host! function to only accept statically
 known strings and the elimination of calls to \lstinline!eval! for statically
 known strings, it is possible to lift the restriction that our host language
 support dynamic code evaluation: if all foreign imports are statically known,
@@ -1531,11 +1531,11 @@ to lift the garbage collection requirement from potential host environments.
 We have presented the design of a novel, portable and platform agnostic foreign
 function interface for hosted Haskell dialects. We have also given a number of
 optimizations, improving the performance and safety of our interface
-and lightening the restrictions placed on the host enfironment, and implemented
+and lightening the restrictions placed on the host environment, and implemented
 our interface as a library for the Haste Haskell-to-JavaScript compiler.
 Finally, we have used this library to further extend our marshalling
 capabilities to cover functions, as well as generic default marshalling for
-arbitrary data types, contrasted out approach with a variety of existing
+arbitrary data types, contrasted our approach with a variety of existing
 foreign function interfaces, and demonstrated that our library is relatively
 performant.
 
