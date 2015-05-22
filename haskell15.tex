@@ -389,9 +389,10 @@ interface gives a simple workflow for interacting with host language code:
 \begin{itemize}
 \item
   define the appropriate \lstinline!ToAny! and \lstinline!FromAny! instances
-  for your types, either through the generic default instances given in section
-  \ref{sec:default-instances} as showcased by our motivating example in figure
-  \ref{lst:good-ffi}, or by defining them manually with the dictionary
+  for your types, either automatically using the generic default instances
+  given in section \ref{sec:default-instances} as showcased by our motivating
+  example in figure \ref{lst:good-ffi},
+  or by defining them manually with the dictionary
   manipulation primitives given in section \ref{sec:marshalling} if a
   particular host language representation is desired; then
 \item
