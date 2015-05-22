@@ -131,24 +131,47 @@ This code snippet is more akin to thinly veiled C code than idiomatic, readable
 Haskell; an unfortunate reality of working with the standard foreign function
 interface. But is this really the best we can do?
 
-When the world we are interfacing with uses C as its lingua franca, then the
-FFI may be quite enough. However, Haskell does not only compile to
-traditional C-based architectures, but to higher level environments --- most
-prominently JavaScript --- as well. In writing this paper, we seek to liberate
-Haskell code targeting JavaScript and similar high level platforms from the
-shackles of the low level Foreign Function Interface traditionally used to
-interface Haskell with C.
+Traditionally, Haskell programs have used the Foreign Function Interface
+extension\ \cite{ffi} to communicate with other languages. This works
+passably well in the world of native binary programs running on bare metal,
+where the C calling conventions have become the de facto standard of foreign
+data interchange.
+The C language has no notion of higher level data structures or
+fancy data representation, making it the perfect lowest common denominator
+interlingua for language to language communication:
+there is no ambiguity or clash between different languages' built-in
+representation of various higher level data structures, as there simply
+\emph{are} no higher level data structures.
 
-The FFI prioritizes compatibility via a lowest common denominator language: C.
-To avoid making communications with our high level target platforms subject
-to this unfortunate detour via an interface that fits neither Haskell nor
-our target platform, we desire the following properties in a new FFI for a
-hosted Haskell dialect:
+With the rise of the web browser as a major application platform, however,
+a whole new breed of \emph{hosted} dialects of Haskell and other functional
+programming languages have emerged, compiling not only to JavaScript and the
+web browser platform, but to other high level languages as well.
+New languages like Idris\ \cite{idris} offer a multitude of backends,
+some of which are hosted, and compilers like \emph{Haste}\ \cite{haste} and
+\emph{Ocsigen}\ \cite{ocsigen} take advantage of multiple backends to
+implement \emph{program slicing}, producing programs which run concurrently
+distributed over a hosted context and an unhosted, down-to-the-metal one.
+
+For these hosted language implementations, the same properties that make
+Haskell's traditional foreign function interface a good fit for language
+interoperability make it undesirable as a vehicle for interfacing with
+code written in the respective compiler's host language: the guest language
+commonly shares a large part of its runtime with the host language and
+internally uses many of the same data structures and representations, making
+the forced low level representations of the vanilla foreign function interface
+an unnecessary obstacle rather than a welcome common ground for data
+interchange.
+
+With this background, we believe that, in the domain of hosted Haskell
+dialects, we can improve on the vanilla FFI. More specifically, we would like
+a high level foreign function interface to espouse the following qualities:
 
 \begin{itemize}
 \item
   The FFI should automatically take care of marshalling for any types where
-  marshalling is defined, without extra conversions or other boilerplate code.
+  marshalling is defined, without extra manual conversions or other
+  boilerplate code.
 \item
   Users should be able to easily define their own marshalling schemes for
   arbitrary types.
@@ -195,15 +218,16 @@ Contrasting this with the standard FFI code from figure \ref{lst:bad-ffi}:
   every other function in our program. No extra scaffolding or boilerplate
   code is necessary.
 \item
-  We have not only imported the \lstinline!gettimeofday! system call,
-  but \emph{implemented} it as well.
-  We no longer need to take the long way around with external header
-  files and named, statically known functions.
+  Whereas the FFI example in figure \ref{lst:bad-ffi} had to import the
+  \lstinline!gettimeofday! system call by name, its actual implementation
+  given elsewhere, we have actually \emph{implemented} its JavaScript
+  counterpart at the location of its import, without having to resort to
+  external stubs.
 \end{itemize}
 
 As all languages have some manner of interfacing with foreign code, there
 already exists a large body of work in this problem domain. However, as
-discussed in section \ref{sec:related}, current solutions all fall short of
+we discuss in section \ref{sec:related}, current solutions all fall short of
 the criteria presented here in some way.
 
 \paragraph{A note on ``hosted'' Haskell}
@@ -255,76 +279,6 @@ draft specification\ \cite{es6}, from here on referred to simply as
 \emph{JavaScript}, as our target platform whenever it is necessary to include
 code in the host language.
 
-\subsection{Background}\label{sec:background}
-Traditionally, Haskell programs have used the Foreign Function Interface
-extension\ \cite{ffi} to communicate with other languages. This works
-passably well in the world of native binary programs running on bare metal,
-where the C calling conventions have become the de facto standard of foreign
-data interchange.
-The C language has no notion of higher level data structures or
-fancy data representation, making it the perfect lowest common denominator
-interlingua for language to language communication:
-there is no ambiguity or clash between different languages' built-in
-representation of various higher level data structures, as there simply
-\emph{are} no higher level data structures.
-
-With the rise of the web browser as a major application platform, however,
-a whole new breed of \emph{hosted} dialects of Haskell and other functional
-programming languages have emerged, compiling not only to JavaScript and the
-web browser platform, but to other high level languages as well.
-New languages like Idris\ \cite{idris} offer a multitude of backends,
-some of which are hosted, and compilers like \emph{Haste}\ \cite{haste} and
-\emph{Ocsigen}\ \cite{ocsigen} take advantage of multiple backends to
-implement \emph{program slicing}, producing programs which run concurrently
-distributed over a hosted context and an unhosted, down-to-the-metal one.
-
-For these hosted language implementations, the same properties that make
-Haskell's traditional foreign function interface a good fit for language
-interoperability make it undesirable as a vehicle for interfacing with
-code written in the respective compiler's host language: the guest language
-commonly shares a large part of its runtime with the host language and
-internally uses many of the same data structures and representations, making
-the forced low level representations of the vanilla foreign function interface
-an unnecessary nuisance rather than a welcome common ground for data
-interchange.
-
-To further illustrate the issue, let us refer back to figure \ref{lst:bad-ffi},
-which we introduced in section \ref{sec:intro}.
-
-This code has several problems when interfacing with a high level language
-rather than the pointer-dominated world of C that the FFI was designed to
-cope with:
-
-\begin{itemize}
-\item
-  Pervasive use of pointers not only makes the code hard to read and
-  understand, but also does not map well to the underlying high level
-  language.
-\item
-  Jumping through type-level hoops is required to appease the
-  \lstinline!foreign import! declaration, which only recognizes types that
-  make sense in C.
-\item
-  Extra scaffolding is required at all call sites to marshal data to/from
-  their respective C implementations. While this is usually solved
-  by hiding the foreign imports themselves and exporting wrapper functions to
-  save the module's consumer from having to deal with these details, as is done
-  in this example, this still requires someone to write that extra
-  boilerplate code.
-\item
-  The FFI only lets us import named external functions, but our high level
-  host language may support higher order functions: it would be nice to be able
-  to take advantage of this fact.
-\end{itemize}
-
-In addition to the above points, while not exhibited by this particular
-example, passing callbacks across the foreign function interface is highly
-problematic as well.
-
-When working in a hosted Haskell dialect, we ought to be able to do better
-than this: bound no more by the fetters of C, hosted Haskell should be able
-to interface with its host language in a less verbose and more flexible manner.
-
 \section{An FFI for hosted environments}\label{sec:interface}
 Our interface is based on the idea that the entirety of an interaction with the
 host environment need not be an atomic operation. Rather, we attempt to break
@@ -335,9 +289,9 @@ extent possible, only reaching out to the host environment when it is clear
 that a task is impossible to perform within the confines of Haskell.
 
 \subsection{The interface}
-This section describes the programmer's view of our interface,
-its Haskell formulation given in figure \ref{lst:interface}, and gives
+This section describes the programmer's view of our interface and gives
 examples of its usage.
+The Haskell formulation of the interface is given in figure \ref{lst:interface}.
 
 As the main purpose of a foreign interface is to shovel data back and
 forth through a rift spanning two separate programming worlds, it makes sense
@@ -1293,7 +1247,7 @@ allowing the user to have the FFI cookie and eat it at the same time.
 While the additional performance cost incurred from the additional safety may
 be unwanted when the user is completely sure that a particular function
 will never, ever return anything but an actual \lstinline!Number!, said user
-is in free to write an \lstinline!UnsafeDouble! wrapper with an appropriately
+is free to write an \lstinline!UnsafeDouble! wrapper with an appropriately
 fast and loose \lstinline!FromAny! instance to sidestep the (hopefully)
 unnecessary safety measures.
 
