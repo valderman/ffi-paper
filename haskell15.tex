@@ -92,7 +92,6 @@
 compilers; interoperability; web
 
 \section{Introduction}\label{sec:intro}
-
 Interfacing with other languages is one of the more painful aspects of modern
 day Haskell development. Consider figure \ref{lst:bad-ffi}, taken from the
 standard libraries of GHC; a piece of code to retrieve the
@@ -130,9 +129,28 @@ getCTimeval = with (MkCTimeval 0 0) $ \ptval -> do
 This code snippet is more akin to thinly veiled C code than idiomatic, readable
 Haskell; an unfortunate reality of working with the standard foreign function
 interface. But is this really the best we can do?
+During our work on the web-targeting Haste compiler\ \cite{haste}, we have
+come to believe that, for high level target environments, it is not.
+
+While Haste initially made use of the conventional Foreign Function Interface
+extension\ \cite{ffi} to interface with its browser target environment,
+this presented certain difficulties.
+The modern web browser environment is highly reliant on callback functions and
+complex data types, none of which are trivial to pass through the FFI,
+making browser-interfacing Haste code relatively clunky and byzantine.
+
+To rectify this situation, we subvert the FFI for our own purposes. We decompose
+interactions with the host environment into its constituent parts: marshalling
+arguments into the target language, performing the actual foreign call, and
+finally marshalling the results back into Haskell.
+We implement these parts in Haskell itself to the extent possible,
+only reaching out to the host environment through the FFI for our lowest level
+building blocks. The result is a foreign function interface which to a high
+degree automates the tedium involved in communicating with a foreign
+environment.
 
 Traditionally, Haskell programs have used the Foreign Function Interface
-extension\ \cite{ffi} to communicate with other languages. This works
+extension to communicate with other languages. This works
 passably well in the world of native binary programs running on bare metal,
 where the C calling conventions have become the de facto standard of foreign
 data interchange.
@@ -280,14 +298,6 @@ draft specification\ \cite{es6}, from here on referred to simply as
 code in the host language.
 
 \section{An FFI for hosted environments}\label{sec:interface}
-Our interface is based on the idea that the entirety of an interaction with the
-host environment need not be an atomic operation. Rather, we attempt to break
-foreign calls down into its constituent parts: marshalling arguments into the
-target language, performing the actual call, and finally marshalling the
-results back into Haskell. We implement these parts in Haskell itself to the
-extent possible, only reaching out to the host environment when it is clear
-that a task is impossible to perform within the confines of Haskell.
-
 \subsection{The interface}
 This section describes the programmer's view of our interface and gives
 examples of its usage.
@@ -347,7 +357,7 @@ imported from the host language into our Haskell program if and only if:
 
   host :: Import f => String -> f
 \end{code}
-\caption{The programmer's view of our library}
+\caption{The programmer's view of our interface}
 \label{lst:interface}
 \end{listingfloat}
 
