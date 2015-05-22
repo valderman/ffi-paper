@@ -335,6 +335,10 @@ extent possible, only reaching out to the host environment when it is clear
 that a task is impossible to perform within the confines of Haskell.
 
 \subsection{The interface}
+This section describes the programmer's view of our interface,
+its Haskell formulation given in figure \ref{lst:interface}, and gives
+examples of its usage.
+
 As the main purpose of a foreign interface is to shovel data back and
 forth through a rift spanning two separate programming worlds, it makes sense
 to begin the description of any such interface with one central question:
@@ -360,8 +364,6 @@ imported from the host language into our Haskell program if and only if:
   its return type resides in the \lstinline!IO! monad, accounting for the
   possibility of side effects in host language functions.
 \end{itemize}
-The Haskell embodiment of these properties making up our interface is given in
-figure \ref{lst:interface}.
 
 \begin{listingfloat}
 \begin{code}
@@ -369,13 +371,25 @@ figure \ref{lst:interface}.
 
   class ToAny a where
     toAny :: a -> HostAny
+    default toAny :: (GToAny (Rep a), Generic a)
+                  => a -> HostAny
 
   class FromAny a where
     fromAny :: HostAny -> IO a
+    default fromAny :: (GFromAny (Rep a), Generic a)
+                  => HostAny -> IO a
 
   class Import f
   instance (ToAny a, Import b) => Import (a -> b)
   instance FromAny a           => Import (IO a)
+
+  -- Instances for functions and basic types
+  instance FromAny Int
+  instance ToAny Int
+  ...
+  instance Import f => FromAny f
+  instance (FromAny a, Exportable b) => ToAny (a -> b)
+  instance ToAny a => ToAny (IO a)
 
   host :: Import f => String -> f
 \end{code}
@@ -383,30 +397,35 @@ figure \ref{lst:interface}.
 \label{lst:interface}
 \end{listingfloat}
 
-Coupled with the base case \lstinline!ToAny! and \lstinline!FromAny! instances
-given in sections \ref{sec:marshalling} and \ref{sec:extensions}, this
-interface gives a simple workflow for interacting with host language code:
+These definitions give rise to a workflow for interacting with host
+language code:
 \begin{itemize}
 \item
   define the appropriate \lstinline!ToAny! and \lstinline!FromAny! instances
-  for your types, either automatically using the generic default instances
-  given in section \ref{sec:default-instances} as showcased by our motivating
-  example in figure \ref{lst:good-ffi},
-  or by defining them manually with the dictionary
-  manipulation primitives given in section \ref{sec:marshalling} if a
-  particular host language representation is desired; then
+  for any custom types, either automatically using the generic default instances
+  as showcased by our motivating example in figure \ref{lst:good-ffi},
+  or by defining them manually if a particular host language representation is
+  desired; then
 \item
   import arbitrary host language symbols or expressions over
   those types using the \lstinline!host! function.
 \end{itemize}
 
-To illustrate how this interface can be used to effortlessly import even
-complex foreign code, we have used our library to
+We let the classic ``hello, world'' example illustrate the import of simple
+host language functions using the interface described in figure
+\ref{lst:interface}:
+
+\begin{code}
+  hello :: String -> IO ()
+  hello = host "name => {alert('Hello, ' + name);}"
+\end{code}
+
+To further illustrate how this interface can be used to effortlessly import
+even higher order foreign functions, we have used our library to
 implement bindings to JavaScript \emph{animation frames} for the Haste
 compiler, a mechanism whereby a user program may request the browser to call
-a certain function before the next repaint of the screen occurs.
+a certain function before the next repaint of the screen occurs:
 
-\begin{listingfloat}
 \begin{code}
   type Time = Double
   newtype FrameHandle = FrameHandle HostAny
@@ -418,14 +437,11 @@ a certain function before the next repaint of the screen occurs.
   cancelFrame :: FrameHandle -> IO ()
   cancelFrame = host "window.cancelAnimationFrame"
 \end{code}
-\caption{Importing higher order functions}
-\label{lst:frames}
-\end{listingfloat}
 
-The resulting code, given in figure \ref{lst:frames}, is straightforward and
-simple, even though it performs the rather non-trivial task of importing a
-higher order function, automatically
-converting user-provided Haskell callbacks to their JavaScript equivalents.
+The resulting code is straightforward and simple, even though it performs
+the rather non-trivial task of importing a \emph{foreign higher order function},
+automatically converting user-provided Haskell callbacks to their JavaScript
+equivalents.
 
 In the rest of this section, we give an implementation of this interface for
 the Haste compiler.
@@ -1009,7 +1025,7 @@ to make pure functions an instance of \lstinline!Exportable!.
     type Host a        = HostAny
 
   instance (ToAny a, Host a ~ HostAny) =>
-            HostFun a where
+            Exportable a where
     mkHostFun = toAny
 
   instance (FromAny a, Exportable b) =>
