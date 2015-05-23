@@ -653,7 +653,7 @@ rewriting \lstinline!host! calls to use the appropriate application function.
 
 Figure \ref{lst:specialization} gives a new implementation of the base case
 of the \lstinline!Import! class which includes this optimization, replacing
-the one given in \ref{sec:interface}.
+the one given in section \ref{sec:interface}.
 
 \begin{listingfloat}
 \begin{code}
@@ -709,8 +709,7 @@ first incarnation described in\ \cite{cloudhaskell}, introduces the
 expression which is not known at compile time into a \lstinline!StaticPtr!
 yields a compiler error.
 
-Implementing a \lstinline!safe_host! function
-\footnote{
+Implementing a \lstinline!safe_host! function\footnote{
   \lstinline!safe_host! function is currently \emph{not} included in our
   reference implementation, as our work to port the Haste compiler it uses to
   GHC 7.10 is still in progress.
@@ -738,9 +737,10 @@ interest to forgo a small bit of that simplicity.
 
 The actual call to \lstinline!eval! does not meaningfully impact
 performance: it is generally only called once per import,
-the resulting function object cached thanks to lazy evaluation.
-\footnote{The main reason for \lstinline!eval! getting called more than once
-being unwise inlining directives from the user.}
+the resulting function object cached thanks to lazy evaluation.\footnote{
+  The main reason for \lstinline!eval! getting called more than once
+  being unwise inlining directives from the user.
+}
 However, its dynamic nature \emph{does}
 carry a significant risk of interfering with the ability of the host language's
 compiler and runtime to analyze and optimize the resulting code.
