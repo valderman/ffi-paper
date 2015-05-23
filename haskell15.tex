@@ -279,8 +279,9 @@ how those types are marshalled. It allows for context dependent sanity
 checking of incoming data from the host language, improving the safety
 of foreign functions. It generalizes over host languages in the sense that it
 is usable with any hosted Haskell dialect where the host language supports
-garbage collection, first class functions, and an \lstinline!eval!-like
-construct.
+garbage collection, first class functions, and a construct supporting dynamic
+code evaluation at runtime such as the \lstinline!eval! function of JavaScript,
+Python, PHP, and others.
 
 In section \ref{sec:optimizations} we discuss various safety and performance
 concerns about our implementation, and show how these concerns can be
