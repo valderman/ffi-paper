@@ -343,7 +343,7 @@ imported from the host language into our Haskell program if and only if:
   class FromAny a where
     fromAny :: HostAny -> IO a
     default fromAny :: (GFromAny (Rep a), Generic a)
-                  => HostAny -> IO a
+                    => HostAny -> IO a
 
   class Import f
   instance (ToAny a, Import b) => Import (a -> b)
