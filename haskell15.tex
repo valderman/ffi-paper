@@ -932,7 +932,7 @@ stable pointer, something we can avoid by telling the compiler never to
 inline the function, ever.
 
 It is also worth pointing out that the concern over duplicating this allocation
-is only valid where this implementation espouses the aforementioned space leak
+is only valid where the implementation also has the aforementioned space leak
 problem, in which case the alternative implementation given in section
 \ref{sec:host-gc} should be preferred anyway.
 
