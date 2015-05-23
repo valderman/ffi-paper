@@ -824,8 +824,8 @@ IO monad into a host language function which, when applied to $n$ host
 language arguments, calls $f$ with those same arguments and returns the $r$
 returned by $f$.\\
 \begin{code}
-  foreign import ccall
-    hsfun_to_host :: (HostAny -> ... -> HostAny) -> HostFun
+  foreign import ccall hsfun_to_host
+    :: (HostAny -> ... -> HostAny) -> HostFun
 \end{code}\\
 But how can we make this operation type check?
 As we are bound to the types the vanilla foreign function interface lets us
