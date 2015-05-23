@@ -876,7 +876,7 @@ and a closed type family describing the type level behavior of our function
 marshalling.\\
 \begin{code}
   type family Host a where
-    Host (a -> b) = a -> Host b
+    Host (a -> b) = HostAny -> Host b
     Host (IO a)   = IO HostAny
 
   class Exportable f where
@@ -996,7 +996,7 @@ to make pure functions an instance of \lstinline!Exportable!.
     hsfun_to_host' `fmap` newStablePtr (mkHostFun f)
 
   type family Host a where
-    Host (a -> b) = a -> Host b
+    Host (a -> b) = HostAny -> Host b
     Host (IO a)   = IO HostAny
     Host a        = HostAny
 
