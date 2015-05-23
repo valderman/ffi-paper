@@ -750,7 +750,8 @@ evidence when targeting the widely used V8 JavaScript engine.
 In the case of JavaScript, it is quite common to run programs through a
 \emph{minifier} --- a static optimizer with focus on code size --- before
 deployment. Not only do such optimizers suffer the same analytical
-difficulties as the language runtime itself, but due to the heavy use of
+difficulties as the language runtime itself from the presence of dynamically
+evaluated code, but due to the heavy use of
 renaming often employed by minifiers to reduce code size, special care needs
 to be taken when writing code that is not visible as such to the minifier:
 code which is externally imported or, in our case, locked away inside a string
@@ -810,13 +811,13 @@ dynamic import puzzle at our disposal through our earlier implementation of
 \lstinline!host!, exports require one more tool in our toolbox: a way to turn
 a Haskell function into a native host language function.
 
-Much like the \lstinline!apply! function used in the implementation of
-\lstinline!host!, the implementation of such a function is specific to the
+Much like the \lstinline!apply! primitive used in the implementation of
+\lstinline!host!, the implementation of such an operation is specific to the
 host language in question. Moreover, as we are dealing with whatever format
-our chosen compiler has opted to represent functions by, this function is also
+our chosen compiler has opted to represent functions by, this operation is also
 dependent on the compiler.
 
-In order to implement this function, we assume the existence of another
+In order to implement this operation, we assume the existence of another
 function \lstinline!hfsun_to_host!, to convert a Haskell function $f$ from $n$
 \lstinline!HostAny! arguments to a \lstinline!HostAny! return value $r$ in the
 IO monad into a host language function which, when applied to $n$ host
@@ -824,9 +825,9 @@ language arguments, calls $f$ with those same arguments and returns the $r$
 returned by $f$.\\
 \begin{code}
   foreign import ccall
-    hsfun_to_host :: ??? -> HostFun
+    hsfun_to_host :: (HostAny -> ... -> HostAny) -> HostFun
 \end{code}\\
-But how can we make this function type check?
+But how can we make this operation type check?
 As we are bound to the types the vanilla foreign function interface lets us
 marshal, we have no way of applying this function to a variadic Haskell
 function over \lstinline!HostAny!s.
@@ -850,20 +851,23 @@ alternative solution is presented.\\
   hsfun_to_host f =
     hsfun_to_host' `fmap` newStablePtr (mkHostFun f)
 \end{code}\\
-Just being able to pass functions to the host language is not enough: we still
-need to marshal return values from Haskell to our host language, and incoming
-arguments in the opposite direction. Essentially, we want to map
+Just being able to pass Haskell functions verbatim to the host language is not
+enough. The functions will expect Haskell values as their arguments and return
+other Haskell values; we need to somehow modify these functions to
+automatically marshal those arguments and return values.
+Essentially, we want to map
 \lstinline!fromAny! over all input arguments to a function, and
 \lstinline!toAny! over its return values.
 While superficially similar to the implementation of the \lstinline!Import!
-class in section \ref{sec:import}, this task is surprisingly tricky:
-where \lstinline!Import! modifies an arbitrary number of arguments and
+class in section \ref{sec:import}, this task is slightly trickier:
+where \lstinline!imp0rt! modifies an arbitrary number of arguments and
 performs some action with respect to a monomorphic value --- the
 \lstinline!HostFun! representation of a host language function --- we now need
 to do the same to a variadic function.
 
 \paragraph{Modifying variadic functions using type families}
-A straightforward application of the \lstinline!Import! method is not flexible
+A straightforward application of the \lstinline!printf! trick used to
+implement \lstinline!Import! is not flexible
 enough to tackle this problem. Instead, we bring in yet another language
 extension, closed type families\ \cite{closedtypefamilies}, to lend us the type
 level flexibility we need. We begin by defining the \lstinline!Exportable!
@@ -872,15 +876,16 @@ and a closed type family describing the type level behavior of our function
 marshalling.\\
 \begin{code}
   type family Host a where
-    type Host (a -> b) = a -> Host b
-    type Host (IO a)   = IO HostAny
+    Host (a -> b) = a -> Host b
+    Host (IO a)   = IO HostAny
 
   class Exportable f where
     mkHostFun :: f -> Host f
 \end{code}\\
 This is relatively straightforward. Inspecting the \lstinline!Host! type
 family, we see that applying \lstinline!mkHostFun! to any eligible function
-must result in a corresponding function of the same arity, but with its
+must result in a corresponding function of the same arity --- hence the
+recursive type family instance for \lstinline!a -> b! --- but with its
 arguments and return values replaced by \lstinline!HostAny!.
 
 Giving the relevant \lstinline!Exportable! instances is now mostly a matter of
@@ -923,7 +928,7 @@ conjunction with \lstinline!hsfun_to_host!.
 According to\ \cite{stableptr}, the creation of stable pointers residing in
 the \lstinline!IO! monad --- the reason for \lstinline!hsfun_to_host! residing
 there as well --- is to avoid accidentally duplicating the allocation of the
-stable pointer, something we can avoid by telling the compiler to never
+stable pointer, something we can avoid by telling the compiler never to
 inline the function, ever.
 
 It is also worth pointing out that the concern over duplicating this allocation
@@ -944,7 +949,8 @@ functions. There are two main obstacles to this:
   Instantiating \lstinline!Exportable! for any type \lstinline!ToAny t => t!
   would accidentally add a \lstinline!ToAny! instance for
   \emph{any type at all}.
-  Even worse, this instance is completely bogus for most types, always treating
+  Even worse, this instance would be completely bogus for most types,
+  always treating
   the argument to its \lstinline!toAny! implementation as a function to be
   converted into a host language function!
 \end{itemize}
@@ -990,9 +996,9 @@ to make pure functions an instance of \lstinline!Exportable!.
     hsfun_to_host' `fmap` newStablePtr (mkHostFun f)
 
   type family Host a where
-    type Host (a -> b) = a -> Host b
-    type Host (IO a)   = IO HostAny
-    type Host a        = HostAny
+    Host (a -> b) = a -> Host b
+    Host (IO a)   = IO HostAny
+    Host a        = HostAny
 
   instance (ToAny a, Host a ~ HostAny) =>
             Exportable a where
