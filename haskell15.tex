@@ -272,10 +272,11 @@ Haskell dialect to interface with its host language at a high level of
 abstraction, and describe its implementation for the Haste compiler.
 \ \cite{haste}
 
-The interface is implementable using plain Haskell '98 with only the Foreign
-Function Interface extension, and is extensible by the user in the types of
-data which can be marshalled between Haskell and host language, as well as in
-how those types are marshalled. It allows for context dependent sanity
+The basic interface is implementable using plain Haskell '98 with only the
+Foreign Function Interface extension, and is extensible by the user in the
+types of data which can be marshalled between Haskell and host language,
+as well as in how those types are marshalled.
+It allows for context dependent sanity
 checking of incoming data from the host language, improving the safety
 of foreign functions. It generalizes over host languages in the sense that it
 is usable with any hosted Haskell dialect where the host language supports
@@ -301,7 +302,7 @@ code in the host language.
 
 \section{An FFI for hosted environments}\label{sec:interface}
 \subsection{The interface}
-This section describes the programmer's view of our interface and gives
+This section describes the programmer's view of our complete interface and gives
 examples of its usage.
 The Haskell formulation of the interface is given in figure \ref{lst:interface}.
 
@@ -409,8 +410,11 @@ the rather non-trivial task of importing a \emph{foreign higher order function},
 automatically converting user-provided Haskell callbacks to their JavaScript
 equivalents.
 
-In the rest of this section, we give an implementation of this interface for
-the Haste compiler.
+In the rest of section \ref{rec:interface}, we give an implementation of the
+basic Haskell '98 interface for the Haste compiler.
+We then extend it with features requiring some extensions to Haskell '98 ---
+most notably generics and default signatures --- in section 4, to arrive at the
+complete interface presented here.
 
 \subsection{Implementing marshalling}\label{sec:marshalling}
 As usual in the functional world, we ought to start with the \emph{base case}:
