@@ -142,10 +142,11 @@ The modern web browser environment is highly reliant on callback functions and
 complex data types, none of which are trivial to pass through the FFI,
 making browser-interfacing Haste code relatively clunky and byzantine.
 
-To rectify this situation, we subvert the FFI for our own purposes. We decompose
-interactions with the host environment into its constituent parts: marshalling
-arguments into the target language, performing the actual foreign call, and
-finally marshalling the results back into Haskell.
+To rectify this situation, we construct a more expressive FFI on top of the
+old one. We decompose interactions with the host environment into its
+constituent parts: marshalling arguments into the target language,
+performing the actual foreign call,
+and finally marshalling the results back into Haskell.
 We implement these parts in Haskell itself to the extent possible,
 only reaching out to the host environment through the FFI for our lowest level
 building blocks. The result is a foreign function interface which to a high
@@ -172,17 +173,17 @@ New languages like Idris\ \cite{idris} offer a multitude of backends,
 some of which are hosted, and compilers like \emph{Haste}\ \cite{haste} and
 \emph{Ocsigen}\ \cite{ocsigen} take advantage of multiple backends to
 implement \emph{program slicing}, producing programs which run concurrently
-distributed over a hosted context and an unhosted, down-to-the-metal one.
+distributed in a high level browser context and traditional,
+down-to-the-metal one.
 
-For these hosted language implementations, the same properties that make
-Haskell's traditional foreign function interface a good fit for language
-interoperability make it undesirable as a vehicle for interfacing with
-code written in the respective compiler's host language: the guest language
-commonly shares a large part of its runtime with the host language and
-internally uses many of the same data structures and representations, making
-the forced low level representations of the vanilla foreign function interface
-an unnecessary obstacle rather than a welcome common ground for data
-interchange.
+The same properties that make Haskell's traditional foreign function interface
+a good fit for language interoperability make it undesirable as a vehicle for
+interfacing with the web-targeting code produced by these compilers: the guest
+language commonly relies on the browser environment for a large part of its
+runtime, and internally uses many of its native high level data structures and
+representations, making the forced low level representations of the vanilla
+foreign function interface an unnecessary obstacle rather than a welcome
+common ground for data interchange.
 
 With this background, we believe that the vanilla FFI is too low level an
 interface for the domain of hosted Haskell dialects.
@@ -252,26 +253,9 @@ already exists a large body of work in this problem domain. However, as
 we discuss in section \ref{sec:related}, current solutions all fall short of
 the criteria presented here in some way.
 
-\paragraph{A note on ``hosted'' Haskell}
-Every programming language is in some sense hosted, where ``hosting'' refers
-to the act of providing said language with an environment in which to execute:
-assembly code is hosted by a physical machine and (usually) an operating
-system; some languages are hosted by C, using it as a compilation target and
-sharing its runtime system rather than compiling straight to machine code;
-and programs written in F\# or Java are hosted by the .NET framework and the
-Java Virtual Machine respectively.
-
-For the purpose of this paper, we take a language or dialect being
-\emph{hosted} to mean that it utilizes a higher level language than the
-traditional operating system and C assembly setup for its compilation target
-and runtime environment. In practice, this often implies JavaScript and its
-associated browser-provided runtime environments, web applications currently
-being very much in fashion, but applies equally well to the aforementioned
-.NET and JVM platforms.
-
 \paragraph{Our contribution}\label{sec:contrib}
-In section \ref{sec:interface}, we present a novel interface for a hosted
-Haskell dialect to interface with its host language at a high level of
+In section \ref{sec:interface}, we present a novel interface for a web-targeting
+Haskell dialect to interface with its host environment at a high level of
 abstraction, and describe its implementation for the Haste compiler.
 \ \cite{haste}
 
@@ -281,11 +265,14 @@ types of data which can be marshalled between Haskell and host language,
 as well as in how those types are marshalled.
 It allows for context dependent sanity
 checking of incoming data from the host language, improving the safety
-of foreign functions. It generalizes over host languages in the sense that it
-is usable with any hosted Haskell dialect where the host language supports
-garbage collection, first class functions, and a construct supporting dynamic
-code evaluation at runtime such as the \lstinline!eval! function of JavaScript,
-Python, PHP, and others.
+of foreign functions.
+
+While designed and described for web-targeting Haskell dialects, the interface
+is applicable outside the web domain as well, and the implementation we give
+is valid for dynamically typed host languages that support garbage collection,
+first class functions, and a construct for dynamic code evaluation at
+runtime such as the \lstinline!eval! function of JavaScript, Python, PHP,
+and others.
 
 In section \ref{sec:optimizations} we discuss various safety and performance
 concerns about our implementation, and show how these concerns can be
@@ -298,12 +285,7 @@ for any Haskell type. We also discuss how to lift the requirement that the host
 language supports dynamic code evaluation at runtime with a slight
 modification to the Haskell compiler in use.
 
-For clarity and consistency, we will be using the ECMAScript 6
-draft specification\ \cite{es6}, from here on referred to simply as
-\emph{JavaScript}, as our target platform whenever it is necessary to include
-code in the host language.
-
-\section{An FFI for hosted environments}\label{sec:interface}
+\section{An FFI for the modern web}\label{sec:interface}
 \subsection{The interface}
 This section describes the programmer's view of our complete interface and gives
 examples of its usage.
@@ -316,7 +298,7 @@ what data can pass through the rift and come out on the other side still making
 sense?
 
 The class of data fulfilling this criterion is embodied in an
-abstract \lstinline!HostAny! data type, inhabited by host language-native
+abstract \lstinline!HostAny! data type, inhabited by web-native
 representations of arbitrary Haskell values.
 A data type is then considered to be marshallable if and only if it can be
 converted to and/or from \lstinline!HostAny!.
@@ -454,8 +436,10 @@ granted in our day to day development work.
 But how should these values be combined? Depending on our host language, we
 may have different primitive data structures at our disposal.
 
-Fortunately, most host languages of interest support two basic aggregate types,
-which are sufficient to represent values of any type: arrays and dictionaries.
+Fortunately, our JavaScript host language, as well as virtually any other
+language for which our interface is implementable as described in section
+\ref{sec:contrib}, support two basic aggregate types, which are sufficient to
+represent values of any type: arrays and dictionaries.
 
 For the purpose of brevity, we assume that we have
 access to a pair of functions
@@ -750,7 +734,7 @@ compiler and runtime to analyze and optimize the resulting code.
 As discussed in section \ref{sec:performance}, this effect is very much in
 evidence when targeting the widely used V8 JavaScript engine.
 
-In the case of JavaScript, it is quite common to run programs through a
+In the JavaScript community, it is quite common to run programs through a
 \emph{minifier} --- a static optimizer with focus on code size --- before
 deployment. Not only do such optimizers suffer the same analytical
 difficulties as the language runtime itself from the presence of dynamically
@@ -1366,7 +1350,7 @@ platforms however, proper stable pointers are the safer solution.
 
 \subsection{Restricting imports to the IO monad}
 The interface presented in this paper does not support importing pure
-functions; any function originating in the host language must be safely locke
+functions; any function originating in the host language must be safely locked
 up within the IO monad. This may be seen as quite a drawback, as a host
 language function operating solely over local state is definitely not
 beyond the realms of possibility. Looking at our implementation of function
@@ -1386,6 +1370,10 @@ involving complex data structures. Permitting the import of pure functions,
 knowing fully well that a race condition exists in the time window between
 the import's application and the resulting thunk's evaluation, does not strike
 us as a shining example of safe API design.
+
+Better, then, to let the user import their foreign code in the IO monad and
+explicitly vouch for its purity, using \lstinline!unsafePerformIO! to bring it
+into the world of pure functions.
 
 \subsection{Continuation-based blocking in non-concurrent environments}
 A particularly neat feature of the foreign function interface employed by the
@@ -1511,22 +1499,25 @@ expressive power it buys.
 \section{Conclusions and future work}
 \label{sec:conclusion}
 \paragraph{Future work}
+While our interface is designed for web-targeting Haskell dialects, extending
+its applicability is generally a venue worthy of further exploration.
+
 By combining two optimizations given in section \ref{sec:optimizations},
 the restriction of our \lstinline!safe_host! function to only accept statically
 known strings and the elimination of calls to \lstinline!eval! for statically
-known strings, it is possible to lift the restriction that our host language
-support dynamic code evaluation: if all foreign imports are statically known,
+known strings, it is possible to lift the restriction that a potential
+host language support dynamic code evaluation:
+if all foreign imports are statically known,
 and we are able to eliminate \lstinline!eval! calls for all statically known
-functions, it follows that we are able to eliminate all \lstinline!eval!
-calls.
+functions, it follows that we are able to eliminate all \lstinline!eval! calls.
 While the actual implementation of this idea has yet to be worked out,
 guaranteeing the complete absence of \lstinline!eval! from the generated host
 code would remove the restriction that our host language supports dynamic code
 evaluation at runtime, notably making our interface implementable on
 recent versions of the Java Virtual Machine.
 Implementing this interface for the Java Virtual Machine, with the
-prerequisite Haskell-to-JVM compiler, would lend further weight to our
-assertion that this interface is both both useful and broadly implementable.
+prerequisite Haskell-to-JVM compiler, would lend additional applicability to
+our interface.
 
 Out interface does not currently catch and marshal host language
 exceptions, but requires foreign language code to take care of any exceptions.
@@ -1542,8 +1533,10 @@ programs. It may thus be worthwhile to investigate the compromises needed
 to lift the garbage collection requirement from potential host environments.
 
 \paragraph{Conclusions}
-We have presented the design of a novel, portable and platform agnostic foreign
-function interface for hosted Haskell dialects. We have also given a number of
+We have presented the design of a novel, portable foreign function interface
+for web-targeting Haskell dialects. While designed for the web space, said
+interface is also implementable for a wide range of popular dynamic target
+languages. We have also given a number of
 optimizations, improving the performance and safety of our interface
 and lightening the restrictions placed on the host environment, and implemented
 our interface as a library for the Haste Haskell-to-JavaScript compiler.
