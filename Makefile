@@ -1,22 +1,25 @@
-SOURCES=haskell15.tex macros.tex sigplanconf.cls lsthaskell.tex
+SOURCES=ifl15.tex macros.tex sigplanconf.cls lsthaskell.tex
 
-dev: haskell15.pdf
+dev: ifl15.pdf
 
-all: haskell15.ps haskell15.pdf haskell15.zip
+all: ifl15.ps ifl15.pdf ifl15.zip
 
-haskell15.ps: haskell15.dvi
-	dvips -o haskell15.ps haskell15.dvi
-	dvips -o haskell15.ps haskell15.dvi
+ifl15.ps: ifl15.dvi
+	dvips -o ifl15.ps ifl15.dvi
+	dvips -o ifl15.ps ifl15.dvi
 
-haskell15.dvi: $(SOURCES)
-	pslatex haskell15.tex
-	pslatex haskell15.tex
+ifl15.dvi: $(SOURCES)
+	pslatex ifl15.tex
+	pslatex ifl15.tex
 
-haskell15.pdf: $(SOURCES)
-	pdflatex haskell15.tex
-	pdflatex haskell15.tex
+ifl15.pdf: $(SOURCES)
+	pdflatex ifl15.tex
+	pdflatex ifl15.tex
 
-haskell15.zip: $(SOURCES)
-	mkdir -p haskell15
-	cp -f $(SOURCES) haskell15/
-	zip -r haskell15 haskell15
+ifl15.zip: $(SOURCES)
+	mkdir -p ifl15
+	cp -f $(SOURCES) ifl15/
+	zip -r ifl15 ifl15
+
+clean:
+	rm ifl15.log ifl15.aux *~
