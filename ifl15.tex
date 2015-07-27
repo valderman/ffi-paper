@@ -560,14 +560,13 @@ the function in question has been fully applied.
 In the case of the \lstinline!host! function, that computation would be
 applying a foreign function to said list of arguments.
 
-This suggests the following class definition. As \lstinline!import! is a
-reserved keyword, we have to make do with an alternate spelling.
+This suggests the following class definition.
 
 \begin{code}
   type HostFun = HostAny
 
   class Import f where
-    imp0rt :: HostFun -> [HostAny] -> a
+    import_ :: HostFun -> [HostAny] -> a
 \end{code}
 
 For our purposes, the base case is a nullary computation in the IO monad:
@@ -577,7 +576,7 @@ For our purposes, the base case is a nullary computation in the IO monad:
     apply :: HostFun -> HostAny -> IO HostAny
 
   instance FromAny a => Import (IO a) where
-    imp0rt f args =
+    import_ f args =
       apply f (toAny args) >>= fromAny
 \end{code}
 
@@ -596,8 +595,8 @@ argument and recurse.
 \begin{code}
   instance (ToAny a, Import b) =>
            Import (a -> b) where
-    imp0rt f args =
-      \arg -> imp0rt f (toAny arg : args)
+    import_ f args =
+      \arg -> import_ f (toAny arg : args)
 \end{code}
 
 With this, we have all the building blocks required to implement the
@@ -612,7 +611,7 @@ function \lstinline!toHostString :: String -> HostString!.
     eval :: HostString -> HostFun
 
   host :: Import f => String -> f
-  host s = imp0rt f []
+  host s = import_ f []
     where
       f = eval (toHostString s)
 \end{code}
@@ -638,7 +637,7 @@ apply to significantly enhance the performance and safety of our interface.
 \subsection{Eliminating argument passing overheads}
 \label{sec:specialization}
 The performance-minded reader may notice something troubling about the
-implementation of \lstinline!imp0rt!: the construction of an intermediate list
+implementation of \lstinline!import_!: the construction of an intermediate list
 of arguments. Constructing this intermediate list only to convert it into a
 host language suitable representation which is promptly deconstructed as soon
 as it reaches the imported function takes a lot of work. Even worse, this work
@@ -791,7 +790,7 @@ this functionality on top of our basic interface.
 \paragraph{Dynamic imports}
 One appealing characteristic of our interface is that it makes the marshalling
 of functions between Haskell and the host language easy. In the case of
-passing host functions into Haskell, the \lstinline!imp0rt! function used to
+passing host functions into Haskell, the \lstinline!import_! function used to
 implement \lstinline!host! has already done the heavy lifting for us.
 Only adding an appropriate \lstinline!FromAny! instance remains.
 
@@ -805,7 +804,7 @@ as an import type by way of the \lstinline!host! function.
 
 \begin{code}
   instance Import a => FromAny a where
-    fromAny f = return (imp0rt f [])
+    fromAny f = return (import_ f [])
 \end{code}
 
 \paragraph{Passing functions to foreign code}
@@ -864,7 +863,7 @@ Essentially, we want to map
 \lstinline!toAny! over its return values.
 While superficially similar to the implementation of the \lstinline!Import!
 class in section \ref{sec:import}, this task is slightly trickier:
-where \lstinline!imp0rt! modifies an arbitrary number of arguments and
+where \lstinline!import_! modifies an arbitrary number of arguments and
 performs some action with respect to a monomorphic value --- the
 \lstinline!HostFun! representation of a host language function --- we now need
 to do the same to a variadic function.
