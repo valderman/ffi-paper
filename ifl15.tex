@@ -1229,8 +1229,14 @@ true, by passing the marshalled value to the JavaScript built-in function
 \lstinline!Number!. What this benchmark tells us is that checking if something
 is a number or not is roughly 14 times slower than just copying the same value.
 By replacing our safe marshalling function with one that mimics the behavior
-of the vanilla FFI, we see the same performance and generated code as in the
-\emph{tight loop, no inbound data} case.
+of the vanilla FFI - easily accomplished by adding a newtype wrapper for
+\lstinline!Double! with the appropriate \lstinline!FromAny! instance -
+we see the same performance and generated code
+as in the \emph{tight loop, no inbound data} case.
+
+Thus, although we prefer to err on the side of safety for the default
+marshalling of numbers, the choice on whether to use the slower, safer
+marshalling or the faster, unsafe one is ultimately left to the user.
 
 \paragraph{Loose loop, no inbound data}
 Moving to a less optimized loop, the percentage of the execution time spend
@@ -1243,8 +1249,10 @@ coming from the host language; the malus to strictness analysis incurred by
 our library in action again.
 
 \paragraph{Performance verdict: acceptable}
-Judging by these numbers, disregarding the additional cost incurred by the
-additional safety measures, the performance of our library is quite acceptable,
+Judging by these numbers, disregarding the cost incurred by
+the additional safety measures in the \emph{tight loop, with inbound data} case,
+the expensive safety measures being completely optional and not a required
+part or our framework, the performance of our library is quite acceptable,
 ranging from slightly faster than the vanilla FFI to at most twice as slow.
 Considering that calls between Haskell and the host environment are usually
 relatively few and far between, this performance difference should be
