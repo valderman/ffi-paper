@@ -1294,11 +1294,11 @@ foreign call to take when encountering an error value would be to throw an
 exception, informing the user ``out of band'' rather than by somehow threading
 an error value to the entire call.
 
-It is then simpler, not to mention more performant, to trust that the foreign
-code in question is well behaved --- something we must do anyway since we
-automatically rely on its correctness by allowing our program to depend upon
-it --- and throw that exception immediately on conversion failure rather than
-taking a detour via error values, should this trust prove to be misplaced.
+It is then simpler, as well as reducing the amount of error checking overhead
+necessary, to trust that the foreign code in question is usually well behaved
+and throw the previously mentioned exception immediately on conversion failure
+rather than taking a detour via error values,
+should this trust prove to be misplaced.
 
 \subsection{Limitation to garbage collected host languages}
 \label{sec:host-gc}
@@ -1541,18 +1541,20 @@ programs. It may thus be worthwhile to investigate the compromises needed
 to lift the garbage collection requirement from potential host environments.
 
 \paragraph{Conclusions}
-We have presented the design of a novel, portable foreign function interface
-for web-targeting Haskell dialects. While designed for the web space, said
-interface is also implementable for a wide range of popular dynamic target
-languages. We have also given a number of
-optimizations, improving the performance and safety of our interface
+We have presented the design and implementation of a novel, portable foreign
+function interface for web-targeting Haskell dialects. While designed for the
+web sphere, the given implementation is also applicable to a wide range of
+other high level target languages as well.
+
+We have also given a number of optimizations, improving the performance and
+safety of our interface
 and lightening the restrictions placed on the host environment, and implemented
 our interface as a library for the Haste Haskell-to-JavaScript compiler.
 Finally, we have used this library to further extend our marshalling
 capabilities to cover functions, as well as generic default marshalling for
 arbitrary data types, contrasted our approach with a variety of existing
-foreign function interfaces, and demonstrated that our library is relatively
-performant.
+foreign function interfaces, and demonstrated that our library does not
+introduce excessive performance overhead compared to the vanilla FFI.
 
 While our interface is currently not applicable to Haskell implementations
 targeting low level, C-like environments, it brings significant reductions in
