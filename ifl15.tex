@@ -125,15 +125,13 @@ getCTimeval = with (MkCTimeval 0 0) $ \ptval -> do
     gettimeofday ptval nullPtr
   peek ptval
 \end{code}
-\caption{The current state of foreign imports}
+\caption{The vanilla Foreign Function Interface}
 \label{lst:bad-ffi}
 \end{listingfloat}
 
 This code snippet is more akin to thinly veiled C code than idiomatic, readable
 Haskell; an unfortunate reality of working with the standard foreign function
-interface. But is this really the best we can do?
-During our work on the web-targeting Haste compiler\ \cite{haste}, we have
-come to believe that, for high level target environments, it is not.
+interface.
 
 While Haste initially made use of the conventional Foreign Function Interface
 extension\ \cite{ffi} to interface with its browser target environment,
@@ -156,7 +154,7 @@ environment.
 Traditionally, Haskell programs have used the Foreign Function Interface
 extension to communicate with other languages. This works
 passably well in the world of native binary programs running on bare metal,
-where the C calling conventions have become the de facto standard of foreign
+where C calling conventions have become the de facto standard of foreign
 data interchange.
 The C language has no notion of higher level data structures or
 fancy data representation, making it the perfect lowest common denominator
@@ -248,10 +246,12 @@ Contrasting this with the standard FFI code from figure \ref{lst:bad-ffi}:
   external stubs.
 \end{itemize}
 
-As all languages have some manner of interfacing with foreign code, there
-already exists a large body of work in this problem domain. However, as
-we discuss in section \ref{sec:related}, current solutions all fall short of
-the criteria presented here in some way.
+The idea of a higher level foreign function interface is by no means novel in
+itself; there already exists a large body of work in this problem domain,
+as we discuss in sectoin \ref{sec:related}. However, to our knowledge, our
+solution is the first to address all of the aforementioned criteria.
+In particular, we are not aware of any other FFI framework that can be
+implemented entirely without compiler modifications.
 
 \paragraph{Our contribution}\label{sec:contrib}
 In section \ref{sec:interface}, we present a novel interface for a web-targeting
