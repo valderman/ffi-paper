@@ -1151,31 +1151,45 @@ thing.
 We have measured the performance of an implementation of our interface for the
 Haste compiler, applying the optimizations described in section
 \ref{sec:optimizations}, against the Haste compiler's implementation of the
-vanilla FFI. To establish a baseline for basic marshalling rather than
-comparing apples to oranges by attempting to include more complex types
-into our benchmarks, types which may not even be properly marshallable using
-the vanilla FFI, we have chosen to only benchmark the marshalling of
-\lstinline!Double!s, which map directly to JavaScript's native
-\lstinline!Number! type.
+vanilla FFI.
 
 To get a picture of how our library fares in different scenarios,
-two microbenchmarks were devised: one which repeatedly applies a foreign
-function, which performs no computation to make differences in
-calling overhead stand out as much as possible, in a strict, tight, tail
-recursive loop, and one which does the same in a higher level loop,
-constructed from nested calls to \lstinline!mapM! over a list.
-In order to separately
-test the overheads of marshalling outbound and inbound data, the benchmarks
-were created using two variants each: one which ignores the value returned
-by the foreign function, and one which adds up the results.
-These benchmarks were then run and timed
-using the node.js JavaScript interpreter, with the foreign function imported
-through our library and the vanilla FFI respectively.
+several microbenchmarks were devised:
+
+\begin{itemize}
+\item
+  \emph{Outbound}, which applies a foreign function to several arguments of
+  type \lstinline!Double!. The function's return value is discarded, in order
+  to only measure outbound marshalling overhead for primitive types.
+\item
+  \emph{In-out}, which applies a foreign function to several \lstinline!Double!
+  arguments and marshals its return value, also of type \lstinline!Double!,
+  back into Haskell land. This measures inbound as well as outbound marshalling
+  of primitive types.
+\item
+  \emph{getCurrentTime} benchmarks the implementation of
+  \lstinline!getCurrentTime! given in figure \ref{lst:good-ffi} against
+  the equivalent implementation given in figure \ref{lst:bad-ffi}, both
+  modified to accept an \lstinline!UTCTime! value as input in addition to
+  returning the current time, in order to measure outbound marshalling of
+  product types as well as inbound.
+\end{itemize}
+
+These functions were then repeatedly applied in two different contexts: one
+tight, strict, tail recursive loop, guaranteed to be produce as efficient code
+as possible; and one which simply consisted of running \lstinline!mapM_! over
+a list of appropriate length, to obtain higher level code which is harder to
+optimize and analyse for strictness.
+
+The resulting programs, compiled with the Haste compiler, were then repeatedly
+executed, and the average run times of the programs using our interface
+compared against the average run times of their FFI counterparts.
 
 While this may not be the most rigorous of performance evaluations,
 the results are repeatable, and the methodology is enough for our purposes:
 getting a rough picture of how much speed we are giving up for a more
 convenient interface.
+
 The results for each benchmark are given in table \ref{tbl:performance} as
 the ratio of the run time for our library over the run time for the vanilla
 FFI.
@@ -1185,11 +1199,13 @@ FFI.
   \begin{center}
     \begin{tabular}{|r|c|l|}
       \hline
-                                   & Tight loop & High level code \\
+                                   & Tight loop & \lstinline!mapM_! \\
       \hline
-      Outbound marshalling only    & 0.85       & 1.33 \\
+      Outbound                     & 1.00       & 1.16 \\
       \hline
-      In- and outbound marshalling & 14.52      & 1.76 \\
+      In-out                       & 1.00       & 1.05 \\
+      \hline
+      getCurrentTime               & 0.07       & 0.37 \\
       \hline
     \end{tabular}
   \end{center}
@@ -1197,76 +1213,49 @@ FFI.
   \label{tbl:performance}
 \end{table}
 
-\paragraph{Tight loop, no inbound data}
+\paragraph{Outbound}
 Looking at the performance numbers, our library performs surprisingly well in
-a highly optimized loop, even edging out the vanilla FFI by a slight margin.
-The reason for this discrepancy is not entirely clear. The only major difference
-generated in the JavaScript code generated between the two is the creation and
-evaluation of one extra thunk, as well as the first iteration of the loop
-being unrolled, for our interface. This appears to be enough of a change that
-the JavaScript interpreter is able to optimize that program slightly better
-than its vanilla FFI equivalent.
-
-\paragraph{Loose loop, no inbound data}
-Putting our library into a higher level context, this small and highly
-debatable performance advantage disappears. Due to our interface being
+a highly optimized loop, showing now additional overhead over the vanilla FFI.
+In a less optimizable loop, our interface fares slightly worse.
+Due to our interface being
 implemented mainly as a pure Haskell library, the compiler is noticeably worse
 at figuring out the strictness properties of the program compiled using our
 library than with the program using the vanilla FFI, leading to some
 unnecessary creation and evaluation of thunks.
 
-\paragraph{Tight loop, with inbound data}
-Moving on to the benchmarks where we actually marshal incoming data, we see a
-\emph{huge} performance hit on inbound data. It turns out, that this is due to
-the increased safety of our interface. The vanilla foreign function
-interface happily passes whatever value it gets back into Haskell as a double,
-potentially wreaking type-unsafe havoc when it turns out that the ``double''
-returned was actually an array of strings containing someone's shopping list.
+\paragraph{In-out}
+Moving on to the benchmarks where we actually marshal incoming data, the
+picture is much the same as for the \emph{outbound} benchmark, with a slightly
+lower performance penalty for the \lstinline!mapM_! case. This is likely
+attributable to the extra overhead of storing and evaluating the inbound
+values for both versions.
 
-In contrast, our library ensures that what is claimed at the type level --- that
-the value coming from the outside world is a \lstinline!Double! --- is actually
-true, by passing the marshalled value to the JavaScript built-in function
-\lstinline!Number!. What this benchmark tells us is that checking if something
-is a number or not is roughly 14 times slower than just copying the same value.
-By replacing our safe marshalling function with one that mimics the behavior
-of the vanilla FFI - easily accomplished by adding a newtype wrapper for
-\lstinline!Double! with the appropriate \lstinline!FromAny! instance -
-we see the same performance and generated code
-as in the \emph{tight loop, no inbound data} case.
+\paragraph{getCurrentTime}
+Our interface shows a distinct performance advantage when it comes to
+marshalling more complex values, being as much as \emph{fourteen times} faster
+in the case of the highly optimized loop. Our assumption about
+\lstinline!peek!ing and \lstinline!poke!ing at pointers in an environment where
+such low level constructs need to be emulated rather than efficiently
+implemented on the machine level seems to have been correct.
 
-Thus, although we prefer to err on the side of safety for the default
-marshalling of numbers, the choice on whether to use the slower, safer
-marshalling or the faster, unsafe one is ultimately left to the user.
-
-\paragraph{Loose loop, no inbound data}
-Moving to a less optimized loop, the percentage of the execution time spend
-marshalling and calling foreign functions drops drastically, as we can see by
-the performance hit of our library being much smaller than for the tight,
-optimized loop. Analyzing the generated code, this is again due to the extra
-safety net, with an additional slight performance disadvantage from the return
-value being wrapped in a thunk, despite obviously (to a human) being strict
-coming from the host language; the malus to strictness analysis incurred by
-our library in action again.
+This performance advantage is still present in the less optimized loop,
+although much less noticable, a ``mere'' 300\% speedup. Inspecting the
+generated code, we see that this is caused by the loop in question having a
+much larger overhead - an indicator that the function calling overheads in
+both cases are relatively minor compared to other overheads present in the
+generated code.
 
 \paragraph{Performance verdict: acceptable}
-Judging by these numbers, disregarding the cost incurred by
-the additional safety measures in the \emph{tight loop, with inbound data} case,
-the expensive safety measures being completely optional and not a required
-part or our framework, the performance of our library is quite acceptable,
-ranging from slightly faster than the vanilla FFI to at most twice as slow.
-Considering that calls between Haskell and the host environment are usually
-relatively few and far between, this performance difference should be
-negligible. For code which has no choice but to make a large number of calls to
-low level host language functions in performance critical loops,
-using the vanilla FFI alongside our interface remains an option,
-allowing the user to have the FFI cookie and eat it at the same time.
-
-While the additional performance cost incurred from the additional safety may
-be unwanted when the user is completely sure that a particular function
-will never, ever return anything but an actual \lstinline!Number!, said user
-is free to write an \lstinline!UnsafeDouble! wrapper with an appropriately
-fast and loose \lstinline!FromAny! instance to sidestep the (hopefully)
-unnecessary safety measures.
+Judging by these numbers the performance of our library is quite acceptable,
+ranging from significantly faster than the vanilla FFI to at most about 15%
+slower. It is encouraging that our interface's intended use case - marshalling
+more complex type - is showing tangible performance benefits in addition to
+the added convenience it affords the user.
+For code which has no choice but to make a large number of calls to
+low level host language functions over primitive types in performance critical
+loops, using the vanilla FFI instead may be an attractive option to
+reduce the relatively performance penalty - however slight - incurred by our
+interface, allowing the user to have the FFI cookie and eat it at the same time.
 
 \section{Discussion}\label{sec:discussion}
 While two of the tree main limitations our interface places on its host
