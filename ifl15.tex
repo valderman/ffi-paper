@@ -1182,8 +1182,9 @@ a list of appropriate length, to obtain higher level code which is harder to
 optimize and analyse for strictness.
 
 The resulting programs, compiled with the Haste compiler, were then repeatedly
-executed, and the average run times of the programs using our interface
-compared against the average run times of their FFI counterparts.
+executed using the Node.js JavaScript interpreter, and the average run times
+of the programs using our interface compared against the average run times of
+their FFI counterparts.
 
 While this may not be the most rigorous of performance evaluations,
 the results are repeatable, and the methodology is enough for our purposes:
