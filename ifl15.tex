@@ -164,11 +164,12 @@ representation of various higher level data structures, as there simply
 \emph{are} no higher level data structures.
 
 With the rise of the web browser as a major application platform, however,
-a whole new breed of \emph{hosted} dialects of Haskell and other functional
-programming languages have emerged, compiling not only to JavaScript and the
-web browser platform, but to other high level languages as well.
+a whole new breed of dialects of Haskell and other functional
+programming languages have emerged, targeting not only JavaScript and the
+web browser platform, but other high level languages as well.
 New languages like Idris\ \cite{idris} offer a multitude of backends,
-some of which are hosted, and compilers like \emph{Haste}\ \cite{haste} and
+some of which target high level environments, and compilers like \emph{Haste}\
+\cite{haste} and
 \emph{Ocsigen}\ \cite{ocsigen} take advantage of multiple backends to
 implement \emph{program slicing}, producing programs which run concurrently
 distributed in a high level browser context and traditional,
@@ -183,8 +184,9 @@ representations, making the forced low level representations of the vanilla
 foreign function interface an unnecessary obstacle rather than a welcome
 common ground for data interchange.
 
-With this background, we believe that the vanilla FFI is too low level an
-interface for the domain of hosted Haskell dialects.
+With this background, we believe that low level interfaces such as the
+vanilla FFI are not ideally suited  to the domain of functional languages
+targeting the web browser and other high level environments.
 More specifically, we would like a foreign function interface for this domain
 to espouse the following qualities:
 
@@ -239,17 +241,22 @@ Contrasting this with the standard FFI code from figure \ref{lst:bad-ffi}:
   every other function in our program. No extra scaffolding or boilerplate
   code is necessary.
 \item
-  Whereas the FFI example in figure \ref{lst:bad-ffi} had to import the
+  Whereas the code in figure \ref{lst:bad-ffi} had to import the
   \lstinline!gettimeofday! system call by name, its actual implementation
   given elsewhere, we have actually \emph{implemented} its JavaScript
   counterpart at the location of its import, without having to resort to
   external stubs.
 \end{itemize}
 
-The idea of a higher level foreign function interface is by no means novel in
-itself; there already exists a large body of work in this problem domain,
-as we discuss in sectoin \ref{sec:related}. However, to our knowledge, our
-solution is the first to address all of the aforementioned criteria.
+To be clear, the idea of a higher level foreign function interface is by no
+means novel in itself;
+there already exists a large body of work in this problem domain, solving most
+of the problems of \ref{lst:bad-ffi}, which is used here as an example mainly to
+establish the baseline for foreign function interfaces.
+
+We discuss these related approaches in section \ref{sec:related}, contrasting
+them with our approach. To our knowledge, our solution is the first to address
+all of the aforementioned criteria however.
 In particular, we are not aware of any other FFI framework that can be
 implemented entirely without compiler modifications.
 
@@ -298,7 +305,7 @@ what data can pass through the rift and come out on the other side still making
 sense?
 
 The class of data fulfilling this criterion is embodied in an
-abstract \lstinline!HostAny! data type, inhabited by web-native
+abstract \lstinline!HostAny! data type, inhabited by host-native
 representations of arbitrary Haskell values.
 A data type is then considered to be marshallable if and only if it can be
 converted to and/or from \lstinline!HostAny!.
@@ -1140,21 +1147,18 @@ the \lstinline!ToAny! class.\\
 \end{code}\\
 \section{Performance}
 \label{sec:performance}
-It must be said, that performance is not a significant motivator for this work.
-High level features oftentimes come at the price of decreased performance,
-and calling back and forth between Haskell and the host environment is usually
-not cheap under the best circumstances.
-Even so, having a picture of how a particular tool performs vis a vis its
-alternative in the programmer's toolbox is a very useful, even essential,
-thing.
+While increased performance is not a major motivation for this work, it is
+still important to ascertain that using our library does not entail a major
+performance hit. To determine the runtime performance of our interface
+vis a vis the vanilla FFI - a useful baseline for performance comparisons - we
+have benchmarked a reference implementation of our interface against the
+vanilla FFI, both implemented for the Haste compiler.
 
-We have measured the performance of an implementation of our interface for the
-Haste compiler, applying the optimizations described in section
-\ref{sec:optimizations}, against the Haste compiler's implementation of the
-vanilla FFI.
-
-To get a picture of how our library fares in different scenarios,
-several microbenchmarks were devised:
+While benchmarking code outside the context of any particular application is
+often tricky and not necessarily indicative of whole system performance,
+we hope to give a general idea of how our library fares performance-wise in
+several different scenarios.
+To this end, several microbenchmarks were devised:
 
 \begin{itemize}
 \item
@@ -1167,7 +1171,7 @@ several microbenchmarks were devised:
   back into Haskell land. This measures inbound as well as outbound marshalling
   of primitive types.
 \item
-  \emph{getCurrentTime}, which benchmarks the implementation of
+  \emph{Product types}, which benchmarks the implementation of
   \lstinline!getCurrentTime! given in figure \ref{lst:good-ffi} against
   the equivalent implementation given in figure \ref{lst:bad-ffi}, both
   modified to accept an \lstinline!UTCTime! value as input in addition to
@@ -1189,10 +1193,10 @@ a list of appropriate length, to obtain higher level code which is harder to
 optimize and analyse for strictness.
 
 The resulting programs, compiled with the Haste compiler which incorporates all
-the optimizations described in this paper, were then repeatedly
-executed using the Node.js JavaScript interpreter, and the average run times
-of the programs using our interface compared against the average run times of
-their FFI counterparts.
+the optimizations described in section \ref{sec:optimizations},
+were then repeatedly executed using the Node.js JavaScript interpreter,
+and the average run times of the programs using our interface compared against
+the average run times of their FFI counterparts.
 
 While this may not be the most rigorous of performance evaluations,
 the results are repeatable, and the methodology is enough for our purposes:
@@ -1214,7 +1218,7 @@ FFI.
       \hline
       In-out                       & 1.00       & 1.05 \\
       \hline
-      getCurrentTime               & 0.07       & 0.37 \\
+      Product types                & 0.07       & 0.37 \\
       \hline
       Higher order import          & 0.85       & 0.87 \\
       \hline
@@ -1241,7 +1245,7 @@ lower performance penalty for the \lstinline!mapM_! case. This is likely
 attributable to the extra overhead of storing and evaluating the inbound
 values for both versions.
 
-\paragraph{getCurrentTime}
+\paragraph{Product types}
 Our interface shows a distinct performance advantage when it comes to
 marshalling more complex values, being as much as \emph{fourteen times} faster
 in the case of the highly optimized loop. Our assumption about
@@ -1497,8 +1501,8 @@ UHC does, however, provide several low level primitives for manipulating
 JavaScript objects from within Haskell, both destructively and in a purely
 functional manner.
 
-\paragraph{Quasi-quotes}
-Quasi-quotes represent another, more radically different, approach to the
+\paragraph{Quasiquoting}
+Quasiquoting represent another, more radically different, approach to the
 problem of bridging with a host language.\ \cite{quasiquotes}
 Allowing for the inline inclusion of large snippets of foreign code,
 quasi-quotes have a lot in common with our interface, even eclipsing it in
@@ -1509,11 +1513,13 @@ quasi-quotes even further, automating large parts of the stub generation
 and marshalling required for using quasi-quoted host language code as a
 foreign function interface.\ \cite{language-c-inline}
 
-Unfortunately, this usefulness comes at the price of a rather complex
-implementation. Not only is complex templating support from the compiler
-required, but implementations need to be able to parse the host language as
+Unfortunately, this usefulness comes at the price of a more complex
+implementation. Not only does quasiquoting require explicit compiler support,
+but FFI implementors need to supply a parser for the quoted language as
 well. A price in implementation effort that may not always be worth the extra
-expressive power it buys.
+expressive power it buys. While the static, compile time nature of quasiquoting
+gives the opportunity to provide type safety for quoted languages, this
+advantage is rather wasted on JavaScript and other dynamically typed languages.
 
 \section{Conclusions and future work}
 \label{sec:conclusion}
@@ -1677,7 +1683,6 @@ This work has been partially funded by the Swedish Foundation for Strategic Rese
   Yakeley, A.
   The \emph{time} package.
   Available from \url{from http://hackage.haskell.org/package/time}, 2015-04-01.
-
 \end{thebibliography}
 
 
