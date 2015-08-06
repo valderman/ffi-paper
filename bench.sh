@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # How many runs?
-TIMES=20
+TIMES=1
 
 # Common Haste args
 ARGS="--opt-whole-program --onexec -o out.js"
@@ -43,7 +43,12 @@ compare_ffis() {
 
 compare_ffis "$COMPILE_TIGHT" "tight loop (no inbound)" "perf.hs"
 compare_ffis "$COMPILE_LOOSE" "loose loop (no inbound)" "perf.hs"
+
 compare_ffis "$COMPILE_TIGHT -D__MARSHAL_INBOUND__" "tight loop (w/ inbound)" "perf.hs"
 compare_ffis "$COMPILE_LOOSE -D__MARSHAL_INBOUND__" "loose loop (w/ inbound)" "perf.hs"
+
 compare_ffis "$COMPILE_TIGHT" "tight struct" "structperf.hs"
 compare_ffis "$COMPILE_LOOSE" "loose struct" "structperf.hs"
+
+compare_ffis "$COMPILE_TIGHT" "tight HOFs" "funperf.hs" 2> /dev/null
+compare_ffis "$COMPILE_LOOSE" "loose HOFs" "funperf.hs" 2> /dev/null

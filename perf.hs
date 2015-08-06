@@ -16,7 +16,7 @@ foreign import ccall f :: Double -> Double -> Double -> Double -> Double -> IO D
 #ifdef __USE_TIGHT_LOOP__
 
 theTest = do
-  n <- for 100000000 $ \n -> f 1 2 3 4 n
+  n <- for 200000000 $ \n -> f 1 2 3 4 n
   print n
 
 #else

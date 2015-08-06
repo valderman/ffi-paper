@@ -1167,12 +1167,19 @@ several microbenchmarks were devised:
   back into Haskell land. This measures inbound as well as outbound marshalling
   of primitive types.
 \item
-  \emph{getCurrentTime} benchmarks the implementation of
+  \emph{getCurrentTime}, which benchmarks the implementation of
   \lstinline!getCurrentTime! given in figure \ref{lst:good-ffi} against
   the equivalent implementation given in figure \ref{lst:bad-ffi}, both
   modified to accept an \lstinline!UTCTime! value as input in addition to
   returning the current time, in order to measure outbound marshalling of
   product types as well as inbound.
+\item
+  \emph{Higher order import}, which calls a higher order function $f$ using
+  both the vanilla FFI and our method with a side-effecting, function over a
+  single \lstinline!Double! value as its argument.
+  The only purpose of $f$ is to call its argument repeatedly,
+  evaluating the speed with which a higher order Haskell function may be called
+  from external code in addition to the speed of marshalling itself.
 \end{itemize}
 
 These functions were then repeatedly applied in two different contexts: one
@@ -1181,7 +1188,8 @@ as possible; and one which simply consisted of running \lstinline!mapM_! over
 a list of appropriate length, to obtain higher level code which is harder to
 optimize and analyse for strictness.
 
-The resulting programs, compiled with the Haste compiler, were then repeatedly
+The resulting programs, compiled with the Haste compiler which incorporates all
+the optimizations described in this paper, were then repeatedly
 executed using the Node.js JavaScript interpreter, and the average run times
 of the programs using our interface compared against the average run times of
 their FFI counterparts.
@@ -1207,6 +1215,8 @@ FFI.
       In-out                       & 1.00       & 1.05 \\
       \hline
       getCurrentTime               & 0.07       & 0.37 \\
+      \hline
+      Higher order import          & 0.85       & 0.87 \\
       \hline
     \end{tabular}
   \end{center}
@@ -1240,11 +1250,22 @@ such low level constructs need to be emulated rather than efficiently
 implemented on the machine level seems to have been correct.
 
 This performance advantage is still present in the less optimized loop,
-although much less noticable, a ``mere'' 300\% speedup. Inspecting the
-generated code, we see that this is caused by the loop in question having a
+although not quite as extreme. Inspecting the generated code,
+we see that this is caused by the loop in question having a
 much larger overhead - an indicator that the function calling overheads in
 both cases are relatively minor compared to other overheads present in the
 generated code.
+
+\paragraph{Higher order import}
+Our interface seems to compare favorably to the vanilla FFI for this case.
+The reason for this is not immediately obvious: the two interfaces generate
+nearly identical code, the vanilla FFI code being slightly more concise.
+The slight performance difference turns out to be entirely implementation
+specific, however: the code generated for the vanilla FFI benchmark in some
+places pass numeric literals around where the code generated for our
+interface instead passes constant references to the same values.
+Eliminating this difference by modifying the generated code by hand, the
+performance difference between the two becomes negligible.
 
 \paragraph{Performance verdict: acceptable}
 Judging by these numbers the performance of our library is quite acceptable,
@@ -1255,7 +1276,7 @@ the added convenience it affords the user.
 For code which has no choice but to make a large number of calls to
 low level host language functions over primitive types in performance critical
 loops, using the vanilla FFI instead may be an attractive option to
-reduce the relatively performance penalty - however slight - incurred by our
+reduce the performance penalty - however slight - incurred by our
 interface, allowing the user to have the FFI cookie and eat it at the same time.
 
 \section{Discussion}\label{sec:discussion}
