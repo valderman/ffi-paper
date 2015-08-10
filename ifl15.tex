@@ -1504,7 +1504,8 @@ functional manner.
 \paragraph{Quasiquoting}
 Quasiquoting represent another, more radically different, approach to the
 problem of bridging with a host language.\ \cite{quasiquotes}
-Allowing for the inline inclusion of large snippets of foreign code,
+Allowing for the inline inclusion of large snippets of foreign code with
+compile time parsing and type checking,
 quasi-quotes have a lot in common with our interface, even eclipsing it in
 power through anti-quotes, which allow the foreign code expressions to
 incorporate Haskell data provided that the proper marshalling has been
@@ -1513,13 +1514,12 @@ quasi-quotes even further, automating large parts of the stub generation
 and marshalling required for using quasi-quoted host language code as a
 foreign function interface.\ \cite{language-c-inline}
 
-Unfortunately, this usefulness comes at the price of a more complex
-implementation. Not only does quasiquoting require explicit compiler support,
-but FFI implementors need to supply a parser for the quoted language as
-well. A price in implementation effort that may not always be worth the extra
-expressive power it buys. While the static, compile time nature of quasiquoting
-gives the opportunity to provide type safety for quoted languages, this
-advantage is rather wasted on JavaScript and other dynamically typed languages.
+This usefulness comes at the price of a more involved implementation.
+Quasiquoting requires explicit compiler support in the form of
+compile time template metaprogramming as well as special extensions for running
+the quasiquoters themselves.
+In order to make full use of its compile time parsing and analysis capabilities
+an implementor also need to supply a parser for the quoted language.
 
 \section{Conclusions and future work}
 \label{sec:conclusion}
