@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # How many runs?
-TIMES=1
+TIMES=50
 
 # Common Haste args
 ARGS="--opt-whole-program --onexec -o out.js"
