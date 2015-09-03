@@ -1168,7 +1168,7 @@ To this end, several microbenchmarks were devised:
   back into Haskell land. This measures inbound as well as outbound marshalling
   of primitive types.
 \item
-  \emph{Product types}, which benchmarks the implementation of
+  \emph{Product types}, which benchmarks the implementation of\linebreak
   \lstinline!getCurrentTime! given in figure \ref{lst:good-ffi} against
   the equivalent implementation given in figure \ref{lst:bad-ffi}, both
   modified to accept an \lstinline!UTCTime! value as input in addition to
@@ -1270,7 +1270,7 @@ performance difference between the two becomes negligible.
 
 \paragraph{Performance verdict: acceptable}
 Judging by these numbers the performance of our library is quite acceptable,
-ranging from significantly faster than the vanilla FFI to at most about 15%
+ranging from significantly faster than the vanilla FFI to at most about 15\%
 slower. It is encouraging that our interface's intended use case - marshalling
 more complex type - is showing tangible performance benefits in addition to
 the added convenience it affords the user.
