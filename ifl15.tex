@@ -1189,8 +1189,8 @@ To this end, several microbenchmarks were devised:
 \end{itemize}
 
 These functions were then repeatedly applied in two different contexts: one
-tight, strict, tail recursive loop, guaranteed to be produce as efficient code
-as possible; and one which simply consisted of running \lstinline!mapM_! over
+tight, strict, tail recursive loop, intended to produce as efficient code
+as possible; and one which simply consists of running \lstinline!mapM_! over
 a list of appropriate length, to obtain higher level code which is harder to
 optimize and analyse for strictness.
 
@@ -1232,7 +1232,7 @@ FFI.
 
 \paragraph{Outbound}
 Looking at the performance numbers, our library performs surprisingly well in
-a highly optimized loop, showing now additional overhead over the vanilla FFI.
+a highly optimized loop, showing no additional overhead over the vanilla FFI.
 In a less optimizable loop, our interface fares slightly worse.
 Due to our interface being
 implemented mainly as a pure Haskell library, the compiler is noticeably worse
