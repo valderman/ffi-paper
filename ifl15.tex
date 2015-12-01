@@ -452,7 +452,7 @@ represent values of any type: arrays and dictionaries.
 For the purpose of brevity, we assume that we have
 access to a pair of functions
 \lstinline!arrToList :: FromAny a => HostAny -> [a]!
-and \lstinline!listToArr:: ToAny a => [a] -> HostAny!
+and \lstinline!listToArr :: ToAny a => [a] -> HostAny!
 which are used to implement the \lstinline!FromAny! and \lstinline!ToAny!
 instances respectively for lists;
 they are trivial to implement either in Haskell using the vanilla foreign
@@ -734,7 +734,7 @@ the resulting function object cached thanks to lazy evaluation.\footnote{
 }
 However, its dynamic nature \emph{does}
 carry a significant risk of interfering with the ability of the host language's
-compiler and runtime to analyze and optimize the resulting code.
+compiler and runtime to analyse and optimize the resulting code.
 As discussed in section \ref{sec:performance}, this effect is very much in
 evidence when targeting the widely used V8 JavaScript engine.
 
