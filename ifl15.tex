@@ -1501,6 +1501,24 @@ UHC does, however, provide several low level primitives for manipulating
 JavaScript objects from within Haskell, both destructively and in a purely
 functional manner.
 
+\paragraph{Clean: mixing host and client language code}
+The Clean language sports a foreign function interface which differs slightly
+from the rest of the interfaces discussed here. In Clean, the module system
+makes a difference between \emph{definition modules}, where abstract types and
+functions are declared, and \emph{implementation modules}, where implementations
+are given for the types and functions declared in the corresponding definition
+modules.
+Instead of using a special ``foreign import'' syntactic form, Clean allows
+developers to write \emph{system} implementation modules: modules where the
+implementations of functions defined in a definition module may be written in
+a language other than Clean\ \cite{clean}. However, only primitive types may
+be passed to this foreign code and no guarantees, making higher level
+interoperability cumbersome.
+Clean's FFI is thus more flexible than the foreign function interface of GHC,
+allowing host and client language code to be mixed, but less so than the other
+interfaces discussed in this section due to its less expedient marshalling
+capabilities.
+
 \paragraph{Quasiquoting}
 Quasiquoting represent another, more radically different, approach to the
 problem of bridging with a host language.\ \cite{quasiquotes}
