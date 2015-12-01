@@ -404,8 +404,8 @@ equivalents.
 
 In the rest of section \ref{sec:interface}, we give an implementation of the
 basic Haskell '98 interface for the Haste compiler.
-We then extend it with features requiring some extensions to Haskell '98 ---
-most notably generics and default signatures --- in section 4, to arrive at the
+We then extend it with features requiring some extensions to Haskell '98 --
+most notably generics and default signatures -- in section 4, to arrive at the
 complete interface presented here.
 
 \subsection{Implementing marshalling}\label{sec:marshalling}
@@ -624,10 +624,10 @@ feature complete, its non-functional properties can be improved quite a bit
 if we allow ourselves to stray from the tried and true, but slightly
 conservative, path of pure Haskell '98.
 
-Aside from implementation specific tricks --- exploiting knowledge about a
+Aside from implementation specific tricks -- exploiting knowledge about a
 particular compiler's data representation to optimize marshalling, or even
 completely unroll and eliminate some of the basic interface's primitive
-operations, for instance --- there are several general optimizations we can
+operations, for instance -- there are several general optimizations we can
 apply to significantly enhance the performance and safety of our interface.
 
 \subsection{Eliminating argument passing overheads}
@@ -691,8 +691,8 @@ Meanwhile, the \emph{safety-conscious} reader may instead be bristling at the
 thought of executing code contained in something as egregiously untyped and
 untrustworthy as a common string.
 Indeed, by allowing the conversion of arbitrary strings
-into functions, we're setting ourselves up for cross-site scripting attacks
-and other similar code injection attacks!
+into functions, we're setting ourselves up for cross-site scripting and other
+similar code injection attacks!
 
 While this is indeed true in theory, in practice, accidentally passing a
 user-supplied string to the \lstinline!host! function, which in normal use
@@ -743,7 +743,7 @@ As discussed in section \ref{sec:performance}, this effect is very much in
 evidence when targeting the widely used V8 JavaScript engine.
 
 In the JavaScript community, it is quite common to run programs through a
-\emph{minifier} --- a static optimizer with focus on code size --- before
+\emph{minifier} -- a static optimizer with focus on code size -- before
 deployment. Not only do such optimizers suffer the same analytical
 difficulties as the language runtime itself from the presence of dynamically
 evaluated code, but due to the heavy use of
@@ -775,7 +775,7 @@ desirable high level functionality: marshalling of arbitrary functions and
 generic data types.
 
 In this section we demonstrate the flexibility of our interface by implementing
-this functionality on top of our basic interface.
+this functionality on top of it.
 
 \subsection{Dynamic function marshalling}
 \label{sec:marshalling-functions}
@@ -789,7 +789,7 @@ Only adding an appropriate \lstinline!FromAny! instance remains.
 Due to the polymorphic nature of functions, however, we must resort to using
 some language extensions to get the type checker to accept our instance:
 overlapping instances, flexible instances, and undecidable instances.
-Essentially, the loosened restrictions on type class instances allows an
+Essentially, the loosened restrictions on type class instances allow an
 \lstinline!Import! instance to act as a synonym for \lstinline!FromAny!,
 allowing host language functions to return functions of any type admissible
 as an import type by way of the \lstinline!host! function.
@@ -831,7 +831,7 @@ We know that, operationally, \lstinline!hsfun_to_host! expects a Haskell
 function as its input, but the types do not agree; we must somehow find a way
 to pass arbitrary data unchanged to our host language.
 Fortunately, standard Haskell provides us with a way to do exactly what we want:
-\lstinline!StablePointer!s.\ \cite{stableptr} Note that, depending on the
+\lstinline!StablePointer!s\ \cite{stableptr}. Note that, depending on the
 Haskell compiler in use, this use of stable pointers may introduce a space
 leak. This is discussed further in section \ref{sec:host-gc}, and an
 alternative solution is presented.\\
@@ -856,8 +856,8 @@ Essentially, we want to map
 While superficially similar to the implementation of the \lstinline!Import!
 class in section \ref{sec:import}, this task is slightly trickier:
 where \lstinline!import_! modifies an arbitrary number of arguments and
-performs some action with respect to a monomorphic value --- the
-\lstinline!HostFun! representation of a host language function --- we now need
+performs some action with respect to a monomorphic value -- the
+\lstinline!HostFun! representation of a host language function -- we now need
 to do the same to a variadic function.
 
 \paragraph{Modifying variadic functions using type families}
@@ -879,9 +879,9 @@ marshalling.\\
 \end{code}\\
 This is relatively straightforward. Inspecting the \lstinline!Host! type
 family, we see that applying \lstinline!mkHostFun! to any eligible function
-must result in a corresponding function of the same arity --- hence the
-recursive type family instance for \lstinline!a -> b! --- but with its
-arguments and return values replaced by \lstinline!HostAny!.
+must result in a corresponding function of the same arity -- hence the
+recursive type family instance for \lstinline!a -> b! -- but with its
+arguments and return value replaced by \lstinline!HostAny!.
 
 Giving the relevant \lstinline!Exportable! instances is now mostly a matter of
 making the types match up, and concocting a \lstinline!ToAny! instance is only
@@ -909,20 +909,21 @@ a single function argument. While using \lstinline!fromAny! outside the
 \lstinline!mkHostFun! is \emph{not} exported to the user, but only used to
 implement the \lstinline!ToAny! instance for functions.
 
-\lstinline!fromAny! will only be called unsafely when a function is marshalled
-into a \lstinline!HostAny! value and \emph{then} applied. There are two cases
+When a function is marshalled into a \lstinline!HostAny! value and subsequently
+applied, \lstinline!fromAny! will be applied unsafely to each of the
+marshalled function's arguments. There are two cases
 when this can happen: either the marshalled function is called from the host
 language, or it is marshalled back into Haskell and then applied.
 In the former case, the time of the call is trivially well defined assuming
-that our target language is not lazy by default, which is rather unlikely.
+that our target language is not lazy by default.
 In the latter case, the time of the call is still well defined, as our
 interface only admits importing functions in the \lstinline!IO! monad.
 
 Slightly more troubling is the use of \lstinline!unsafePerformIO! in
 conjunction with \lstinline!hsfun_to_host!.
 According to\ \cite{stableptr}, the creation of stable pointers residing in
-the \lstinline!IO! monad --- the reason for \lstinline!hsfun_to_host! residing
-there as well --- is to avoid accidentally duplicating the allocation of the
+the \lstinline!IO! monad -- the reason for \lstinline!hsfun_to_host! residing
+there as well -- is to avoid accidentally duplicating the allocation of the
 stable pointer, something we can avoid by telling the compiler never to
 inline the function, ever.
 
@@ -974,8 +975,8 @@ instance with two slightly more specific ones.
 Figure \ref{lst:export-final} gives our final implementation of dynamic
 function exports.
 Looking at this code we also see why the use of closed type families are
-necessary: the open type families originally introduced by Chakravarty et al
-in\ \cite{typefamilies} do not admit the overlapping type equations required
+necessary: the open type families originally introduced by Chakravarty et
+al\ \cite{typefamilies} do not admit the overlapping type equations required
 to make pure functions an instance of \lstinline!Exportable!.
 
 \begin{listingfloat}
@@ -1048,15 +1049,15 @@ in a single line of code, it would still be nice if we could avoid the tedium
 of writing that one line altogether. Thanks to generic programming and default
 type class instances, we can.
 
-Our implementation of generic marshalling uses GHC generics\ \cite{generics},
-and associated language extensions --- most notably type operators and scoped
-type variables --- making it specific to GHC-based compilers such as Haste and
-GHCJS\ \cite{ghcjs}. GHC generics allows us to traverse values of any type
+Our implementation of generic marshalling uses GHC generics\ \cite{generics}
+and associated language extensions -- most notably type operators and scoped
+type variables -- making it specific to GHC-based compilers such as Haste and
+GHCJS\ \cite{ghcjs}. GHC generics allow us to traverse values of any type
 as though the type was uniformly defined as a tree of sums, products,
 constants and metadata, such as record selectors or constructor names.
 
 For the sake of brevity, and as the actual syntax of GHC generics is
-relatively nondescriptive due to its generality, we only give the basic method
+relatively uninformative due to its generality, we only give the basic method
 of our implementation is this paper, and only consider the case of marshalling
 Haskell values into their host language counterparts.
 Marshalling in the other direction uses the same basic method,
@@ -1289,8 +1290,8 @@ The benchmarks used here are available online from our repository at
 
 \section{Discussion}\label{sec:discussion}
 While two of the tree main limitations our interface places on its host
-language --- the presence of a dynamic code evaluation construct and support for
-first class functions --- have hopefully been adequately explained, and their
+language -- the presence of a dynamic code evaluation construct and support for
+first class functions -- have hopefully been adequately explained, and their
 severity slightly alleviated, in sections \ref{sec:interface} and
 \ref{sec:inline-eval}, there are still several design choices and lingering
 limitations that may need further justification.
