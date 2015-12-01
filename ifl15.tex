@@ -202,7 +202,7 @@ to have the following properties:
   statically known functions.
 \item
   Finally, the FFI should be easy to implement and understand, ideally being
-  implementable without compiler modifications, portable across client
+  implementable without compiler modifications, portable across guest
   language dialects and host environments.
 \end{itemize}
 
@@ -460,7 +460,7 @@ data representation.
 
 For dictionaries, the conversion is not as clear-cut. Depending on the data
 we want to convert, the structure of our desired host language representation
-of two values may well be different even when their guest language
+of two values may well be different even when their client language
 representations are quite similar, or even identical.
 Hence, we need to put the power over this decision into the hands of the user,
 providing functionality to build as well as inspect user-defined dictionaries.
@@ -1329,13 +1329,13 @@ interfaces: ownership and eventual deallocation of memory.
 Our high level interface depends quite heavily on its target language being
 garbage collected, as having to manually manage memory introduces significant
 boilerplate code and complexity: the very things this interface aims to avoid.
-As target platforms \emph{with} garbage collections having to deal with low
+As target platforms \emph{with} garbage collection having to deal with low
 level details such as memory management is the core motivation for this work,
-rectifying this ``problem'' does not fall within the scope of this paper.
+rectifying this issue does not fall within the scope of this paper.
 
 Even so, memory management does rear its ugly head in section
 \ref{sec:marshalling-functions}, where stable pointers are used to pass data
-unchanged from Haskell into our host language, and promptly ignored: note
+unchanged from Haskell into our host language, and is promptly ignored: note
 the complete absence of calls to \lstinline!freeStablePtr!. Implementing our
 interface for the Haste compiler, this is not an issue: Haste makes full use
 of JavaScript's garbage collection capabilities to turn stable pointers into
@@ -1407,23 +1407,23 @@ into the world of pure functions.
 A particularly neat feature of the foreign function interface employed by the
 GHCJS compiler is the ability for foreign host code to suspend execution while
 waiting for an event to occur, even though its JavaScript host environment is
-devoid of any concurrency support.\ \cite{ghcjs}
+devoid of any concurrency support\ \cite{ghcjs}.
 This is accomplished by giving imported functions an extra parameter:
 a continuation to be called upon completion
 of the foreign operation to resume execution of the Haskell program, instead
 of simply returning like a ``normal'' JavaScript function would.
 
-This functionality is not supported by our interface. GHCJS accomplishes this
+This functionality is not supported out of the box. GHCJS accomplishes this
 by outputting continuation passing code which is executed by a clever
 trampolining machinery. Supporting this feature would tie the interface to
 a particular code generation strategy as well as add considerable complexity;
 a price we deem too high to pay for this feature.
 
 Instead, this functionality can be implemented on top of our interface without
-much difficulty using a construct dubbed the ``poor man's concurrency monad''
-\ \cite{poormansconcurrencymonad}; a monad implementing cooperative
-multitasking with blocking synchronization variables in non-concurrent
-environments.
+much difficulty using a construct dubbed the ``poor man's concurrency
+monad''\ \cite{poormansconcurrencymonad}; a monad implementing coarse grained
+preemptive multitasking with blocking synchronization variables in
+non-concurrent environments.
 
 \subsection{Related work}\label{sec:related}
 Aside from the vanilla foreign function interface used as the basis of our
@@ -1432,13 +1432,13 @@ purely functional languages with host language code.
 One common denominator is specialization: without exception, these
 implementations rely in large part on modifications to the compiler or
 language itself, in contrast to our interface which makes some sacrifices
-in order to be implementable as a library over as wide a range of Haskell
-dialects as possible.
+in order to be implementable as a library, maximizing portability across
+host and client languages alike.
 
 \paragraph{Idris: host-parametric FFI}
 \emph{Idris} is a dependently typed, Haskell-like language with backends for
 several host environments,\\
-JavaScript being one of them.\ \cite{idris}
+JavaScript being one of them\ \cite{idris}.
 Like Haskell, Idris features monadic IO, but unlike Haskell, Idris' IO monad
 \emph{is}, in a sense its foreign function interface.
 IO computations are constructed from primitive building blocks, imported using
@@ -1457,7 +1457,7 @@ functions.
 \paragraph{Fay: featureful but static}
 Our interface was partially inspired by the foreign function interface of the
 \emph{Fay} language,
-a ``proper subset of Haskell that compiles to JavaScript''.\ \cite{fay}
+a ``proper subset of Haskell that compiles to JavaScript''\ \cite{fay}.
 While the two are very similar in syntax, allowing users to import typed
 strings of host language code, Fay's solution is highly specialized.
 The compiler takes a heavy hand in the marshalling and import functionality,
@@ -1496,12 +1496,12 @@ functions in particular are cumbersome to push between Haskell and JavaScript.
 
 \paragraph{UHC: the traditional FFI, on steroids for JavaScript}
 The UHC Haskell compiler comes with a JavaScript backend as well, and matching
-higher level extensions to its foreign function interface.\ \cite{uhc}
+higher level extensions to its foreign function interface\ \cite{uhc}.
 Like Fay, UHC provides automatic conversion of Haskell values to JavaScript
 objects, as well as importing arbitrary JavaScript expressions, with some
 parsing and wildcard expansion.
 Also like Fay, the JavaScript representation produced by this
-conversion is determined by the compiler, and not user configurable.
+conversion is determined by the compiler, and is not user configurable.
 UHC does, however, provide several low level primitives for manipulating
 JavaScript objects from within Haskell, both destructively and in a purely
 functional manner.
@@ -1526,7 +1526,7 @@ capabilities.
 
 \paragraph{Quasiquoting}
 Quasiquoting represent another, more radically different, approach to the
-problem of bridging with a host language.\ \cite{quasiquotes}
+problem of bridging with a host language\ \cite{quasiquotes}.
 Allowing for the inline inclusion of large snippets of foreign code with
 compile time parsing and type checking,
 quasi-quotes have a lot in common with our interface, even eclipsing it in
@@ -1535,7 +1535,7 @@ incorporate Haskell data provided that the proper marshalling has been
 implemented. Recent work by Manuel Chakravarty has extended the usefulness of
 quasi-quotes even further, automating large parts of the stub generation
 and marshalling required for using quasi-quoted host language code as a
-foreign function interface.\ \cite{language-c-inline}
+foreign function interface\ \cite{language-c-inline}.
 
 This usefulness comes at the price of a more involved implementation.
 Quasiquoting requires explicit compiler support in the form of
@@ -1553,9 +1553,9 @@ its applicability is generally a venue worthy of further exploration.
 By combining two optimizations given in section \ref{sec:optimizations},
 the restriction of our \lstinline!safe_host! function to only accept statically
 known strings and the elimination of calls to \lstinline!eval! for statically
-known strings, it is possible to lift the restriction that a potential
-host language support dynamic code evaluation:
-if all foreign imports are statically known,
+known strings, it is possible to remove the requirement that a potential
+host language support dynamic code evaluation.
+If all foreign imports are statically known,
 and we are able to eliminate \lstinline!eval! calls for all statically known
 functions, it follows that we are able to eliminate all \lstinline!eval! calls.
 While the actual implementation of this idea has yet to be worked out,
@@ -1603,7 +1603,7 @@ programs with their corresponding host environment in the space where it
 \emph{is} applicable: Haskell implementations for high level target platforms.
 
 Our reference implementation is shipped in both source code and binary form as
-part of the Haste distribution, available from the Haste Language website
+part of the Haste distribution, available from the Haste website
 at\ \cite{haste-lang.org}.
 
 \acks
