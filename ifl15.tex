@@ -132,7 +132,6 @@ getCTimeval = with (MkCTimeval 0 0) $ \ptval -> do
 This code snippet is more akin to thinly veiled C code than idiomatic, readable
 Haskell; an unfortunate reality of working with the standard foreign function
 interface.
-
 While Haste initially made use of the conventional Foreign Function Interface
 extension\ \cite{ffi} to interface with its browser target environment,
 this presented certain difficulties.
@@ -141,10 +140,10 @@ complex data types, none of which are trivial to pass through the FFI,
 making browser-interfacing Haste code relatively clunky and byzantine.
 
 To rectify this situation, we construct a more expressive FFI on top of the
-old one. We decompose interactions with the host environment into its
+old one. We decompose interactions with the host environment into their
 constituent parts: marshalling arguments into the target language,
 performing the actual foreign call,
-and finally marshalling the results back into Haskell.
+and finally marshalling the result back into Haskell.
 We implement these parts in Haskell itself to the extent possible,
 only reaching out to the host environment through the FFI for our lowest level
 building blocks. The result is a foreign function interface which to a high
@@ -161,7 +160,7 @@ fancy data representation, making it the perfect lowest common denominator
 interlingua for language to language communication:
 there is no ambiguity or clash between different languages' built-in
 representation of various higher level data structures, as there simply
-\emph{are} no higher level data structures.
+\emph{are} no higher level data structures on the interface level.
 
 With the rise of the web browser as a major application platform, however,
 a whole new breed of dialects of Haskell and other functional
@@ -170,16 +169,16 @@ web browser platform, but other high level languages as well.
 New languages like Idris\ \cite{idris} offer a multitude of backends,
 some of which target high level environments, and compilers like \emph{Haste}\
 \cite{haste} and
-\emph{Ocsigen}\ \cite{ocsigen} take advantage of multiple backends to
-implement \emph{program slicing}, producing programs which run concurrently
-distributed in a high level browser context and traditional,
-down-to-the-metal one.
+\emph{Ocsigen}\ \cite{ocsigen} take advantage of multiple backends and
+\emph{program slicing} to produce programs which run concurrently
+distributed over a high level context on the browser-based client and a
+traditional, down-to-the-metal one on the server.
 
 The same properties that make Haskell's traditional foreign function interface
 a good fit for language interoperability make it undesirable as a vehicle for
 interfacing with the web-targeting code produced by these compilers: the guest
 language commonly relies on the browser environment for a large part of its
-runtime, and internally uses many of its native high level data structures and
+runtime and internally uses many of its native high level data structures and
 representations, making the forced low level representations of the vanilla
 foreign function interface an unnecessary obstacle rather than a welcome
 common ground for data interchange.
@@ -188,7 +187,7 @@ With this background, we believe that low level interfaces such as the
 vanilla FFI are not ideally suited  to the domain of functional languages
 targeting the web browser and other high level environments.
 More specifically, we would like a foreign function interface for this domain
-to espouse the following qualities:
+to have the following properties:
 
 \begin{itemize}
 \item
@@ -203,8 +202,8 @@ to espouse the following qualities:
   statically known functions.
 \item
   Finally, the FFI should be easy to implement and understand, ideally being
-  implementable as a library portable across Haskell dialects and host
-  languages.
+  implementable without compiler modifications, portable across client
+  language dialects and host environments.
 \end{itemize}
 
 Making this list a bit more concrete in the form of an example, we would like
@@ -250,7 +249,7 @@ Contrasting this with the standard FFI code from figure \ref{lst:bad-ffi}:
 
 To be clear, the idea of a higher level foreign function interface is by no
 means novel in itself;
-there already exists a large body of work in this problem domain, solving most
+there already exists a large body of work in this problem domain, solving many
 of the problems of figure \ref{lst:bad-ffi},
 which is used here as an example mainly to
 establish the baseline for foreign function interfaces.
@@ -265,9 +264,8 @@ implemented entirely without compiler modifications.
 In section \ref{sec:interface}, we present a novel interface for a web-targeting
 Haskell dialect to interface with its host environment at a high level of
 abstraction, and describe its implementation for the Haste compiler.
-\ \cite{haste}
 
-The basic interface is implementable using plain Haskell '98 with only the
+The basic interface is implementable using plain Haskell '98 with the
 Foreign Function Interface extension, and is extensible by the user in the
 types of data which can be marshalled between Haskell and host language,
 as well as in how those types are marshalled.
@@ -287,15 +285,15 @@ concerns about our implementation, and show how these concerns can be
 alleviated by reaching outside the confines of Haskell '98.
 
 In section \ref{sec:extensions} we show the flexibility of our design by using
-it to implement marshalling of functions between the host and guest language,
-and use the GHC generics extension to implement a default marshalling behavior
-for any Haskell type. We also discuss how to lift the requirement that the host
-language supports dynamic code evaluation at runtime with a slight
-modification to the Haskell compiler in use.
+it to implement marshalling of higher order functions between the Haskell and
+JavaScript, and use the GHC generics extension to implement a default
+marshalling behavior for any Haskell type. We also discuss how to lift the
+requirement that the host language supports dynamic code evaluation at runtime
+with a slight modification to the Haskell compiler in use.
 
 \section{An FFI for the modern web}\label{sec:interface}
 \subsection{The interface}
-This section describes the programmer's view of our complete interface and gives
+This section describes the programmer's view of our interface and gives
 examples of its usage.
 The Haskell formulation of the interface is given in figure \ref{lst:interface}.
 
@@ -378,7 +376,7 @@ host language functions using the interface described in figure
 
 \begin{code}
   hello :: String -> IO ()
-  hello = host "name => {alert('Hello, ' + name);}"
+  hello = host "name => alert('Hello, ' + name);"
 \end{code}
 
 To further illustrate how this interface can be used to effortlessly import
@@ -400,7 +398,7 @@ a certain function before the next repaint of the screen occurs:
 \end{code}
 
 The resulting code is straightforward and simple, even though it performs
-the rather non-trivial task of importing a \emph{foreign higher order function},
+the rather non-trivial task of importing a foreign higher order function,
 automatically converting user-provided Haskell callbacks to their JavaScript
 equivalents.
 
@@ -444,12 +442,12 @@ granted in our day to day development work.
 But how should these values be combined? Depending on our host language, we
 may have different primitive data structures at our disposal.
 
-Fortunately, our JavaScript host language, as well as virtually any other
+Fortunately, JavaScript, as well as virtually any other
 language for which our interface is implementable as described in section
 \ref{sec:contrib}, support two basic aggregate types, which are sufficient to
 represent values of any type: arrays and dictionaries.
 
-For the purpose of brevity, we assume that we have
+For the sake of brevity, we assume that we have
 access to a pair of functions
 \lstinline!arrToList :: FromAny a => HostAny -> [a]!
 and \lstinline!listToArr :: ToAny a => [a] -> HostAny!
@@ -534,13 +532,13 @@ dictionary operations.
 It is worth noting that the implementation of \lstinline!getMember! is
 the reason for \lstinline!fromAny! returning a value in the \lstinline!IO!
 monad: foreign data structures are rarely, if ever, guaranteed to be immutable
-and looking up a key in a dictionary is effectively dereferencing a reference,
+and looking up a key in a dictionary is effectively following a reference,
 so we must perform any such lookups at a well defined point in time,
 lest we run the risk of the value being changed in between the application
 of our marshalling function and the evaluation of the resulting thunk.
 
 \subsection{Importing functions}\label{sec:import}
-Implementing our \lstinline!host! function turns out to be slightly trickier
+Implementing the \lstinline!host! function turns out to be slightly trickier
 than marshalling data between environments.
 The types of our imported functions need to differ depending on the arity of
 the imported host language code. This necessitates \lstinline!host! returning
@@ -556,12 +554,15 @@ This suggests the following class definition.
 
 \begin{code}
   type HostFun = HostAny
-
   class Import f where
     import_ :: HostFun -> [HostAny] -> a
 \end{code}
 
-For our purposes, the base case is a nullary computation in the IO monad:
+For our purposes, the base case is a nullary computation in the IO monad.
+The list of arguments is converted from a list to
+a host language array in order to squeeze it through the vanilla foreign
+function interface, and the value we get back is marshalled back into a proper
+Haskell value:
 
 \begin{code}
   foreign import ccall
@@ -576,10 +577,13 @@ Note the use of a foreign import in our base case. As the application of a
 foreign function to a foreign list of foreign arguments is clearly, well, a
 \emph{foreign} matter, we must call out to the host language for this final
 step.
-The list of arguments needs to be converted from \lstinline![HostAny]! to
-\lstinline!HostAny! in order to squeeze it through the vanilla foreign
-function interface, and the value we get back marshalled back into a proper
-Haskell value.
+This function is specific to the host language in use. A possible
+implementation of \lstinline!apply! for a JavaScript host environment may look
+as follows:
+
+\begin{code}
+  (f, args) => f.apply(null, args)
+\end{code}
 
 The inductive case is not much more complex: we only need to marshal a single
 argument and recurse.
@@ -1031,7 +1035,7 @@ arranges for the function to be available in a known, appropriate location.
 \begin{code}
   export :: Exportable f => String -> f -> IO ()
   export =
-    host "(name, f) => {window['haskell'][name] = f;}"
+    host "(name, f) => window['haskell'][name] = f;"
 \end{code}
 
 \subsection{Generic marshalling}
@@ -1666,12 +1670,6 @@ This work has been partially funded by the Swedish Foundation for Strategic Rese
   Epstein, J., Black, A. P., \& Peyton Jones, S. (2011, September).
   Towards Haskell in the cloud.
   In ACM SIGPLAN Notices (Vol. 46, No. 12, pp. 118-129). ACM.
-\bibitem[GHC User's Guide (2015)]{ghc710}
-  The GHC Team.
-  "The Glorious Glasgow Haskell Compilation System User’s Guide, Version 7.10.1",
-  pp. 256-257.
-  Available from \url{http://www.haskell.org/ghc/docs/7.10.1/users_guide.pdf},
-  2015-04-01.
 \bibitem[The Haste language website (2015)]{haste-lang.org}
   The Haste language website.
   Available from \url{http://haste-lang.org}, 2015-05-14.
@@ -1688,6 +1686,9 @@ This work has been partially funded by the Swedish Foundation for Strategic Rese
   Nazarov, V., Mackenzie, H., \& Stegeman, L.
   "GHCJS Haskell to JavaScript Compiler".
   Available from \url{https://github.com/ghcjs/ghcjs}, (2014-05-14).
+\bibitem[Plasmeijer, van Eekelen (2002)]{clean}
+  Plasmeijer, R., \& van Eekelen, M.
+  "Clean language report version 2.1".
 \bibitem[Peyton Jones, Tolmach, Hoare (2001)]{rewriterules}
   Jones Peyton, S., Tolmach, A., \& Hoare, T. (2001, September).
   Playing by the rules: rewriting as a practical optimisation technique in GHC.
@@ -1700,7 +1701,7 @@ This work has been partially funded by the Swedish Foundation for Strategic Rese
 \bibitem[Yakeley, 2014]{time}
   Yakeley, A.
   The \emph{time} package.
-  Available from \url{from http://hackage.haskell.org/package/time}, 2015-04-01.
+  Available from \url{http://hackage.haskell.org/package/time}, 2015-04-01.
 \end{thebibliography}
 
 
