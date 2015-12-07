@@ -125,7 +125,7 @@ getCTimeval = with (MkCTimeval 0 0) $ \ptval -> do
     gettimeofday ptval nullPtr
   peek ptval
 \end{code}
-\caption{The vanilla Foreign Function Interface}
+\caption{Foreign imports using the vanilla Foreign Function Interface}
 \label{lst:bad-ffi}
 \end{listingfloat}
 
@@ -307,7 +307,7 @@ The class of data fulfilling this criterion is embodied in an
 abstract \lstinline!HostAny! data type, inhabited by host-native
 representations of arbitrary Haskell values.
 A data type is then considered to be marshallable if and only if it can be
-converted to and/or from \lstinline!HostAny!.
+converted to \lstinline!HostAny! and back again.
 
 Having established the class of types that can be marshalled, we can now give
 a meaningful definition of \emph{importable} functions: a function can be
@@ -405,8 +405,8 @@ equivalents.
 In the rest of section \ref{sec:interface}, we give an implementation of the
 basic Haskell '98 interface for the Haste compiler.
 We then extend it with features requiring some extensions to Haskell '98 --
-most notably generics and default signatures -- in section 4, to arrive at the
-complete interface presented here.
+most notably generics and default signatures -- in section
+\ref{sec:extensions}, to arrive at the complete interface presented here.
 
 \subsection{Implementing marshalling}\label{sec:marshalling}
 As usual in the functional world, we ought to start with the \emph{base case}:
@@ -555,7 +555,7 @@ This suggests the following class definition.
 \begin{code}
   type HostFun = HostAny
   class Import f where
-    import_ :: HostFun -> [HostAny] -> a
+    import_ :: HostFun -> [HostAny] -> f
 \end{code}
 
 For our purposes, the base case is a nullary computation in the IO monad.
@@ -1094,15 +1094,15 @@ of its type argument.
   \lstinline!c! and call the resulting value \lstinline!c'!.
   \begin{itemize}
   \item
-    \lstinline!c'! is a \emph{dictionary}, we add an entry to it to mark the
+    If \lstinline!c'! is a \emph{dictionary}, we add an entry to it to mark the
     value's constructor name and return the resulting dictionary:
     \lstinline!Tree (("tag", toAny n) : c')!.
   \item
-    \lstinline!c'! is an \emph{empty list}, we simply return the constructor
+    If \lstinline!c'! is an \emph{empty list}, we simply return the constructor
     name:
     \lstinline!One (toAny n)!.
   \item
-    \lstinline!c'! is a nonempty \emph{list} or a \emph{single item},
+    If \lstinline!c'! is a nonempty \emph{list} or a \emph{single item},
     we return a new dictionary consisting of the constructor tag and the
     \lstinline!HostAny! encoding of \lstinline!c'!:\\
     \lstinline!Tree [("tag", toAny n), ("data", toAny c')]!.
@@ -1181,7 +1181,7 @@ To this end, several microbenchmarks were devised:
   product types as well as inbound.
 \item
   \emph{Higher order import}, which calls a higher order function $f$ using
-  both the vanilla FFI and our method with a side-effecting, function over a
+  both the vanilla FFI and our method, with a function over a
   single \lstinline!Double! value as its argument.
   The only purpose of $f$ is to call its argument repeatedly,
   evaluating the speed with which a higher order Haskell function may be called
