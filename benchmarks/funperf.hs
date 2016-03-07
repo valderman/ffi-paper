@@ -3,9 +3,10 @@ import Haste.Foreign
 import Foreign
 import Foreign.C
 import Foreign.C.Types
+import Safe
 
-foreign import ccall "wrapper" wrap :: (Double -> IO ()) -> IO (FunPtr (Double -> IO ()))
-foreign import ccall fficall :: FunPtr (Double -> IO ()) -> IO ()
+foreign import stdcall "wrapper" wrap :: (Double -> IO ()) -> IO (FunPtr (Double -> IO ()))
+foreign import stdcall fficall :: FunPtr (Double -> IO ()) -> IO ()
 
 call :: (Double -> IO ()) -> IO ()
 call = ffi "(function(f){for(var i=0;i<10000;++i){f(i);}})"
@@ -22,17 +23,17 @@ times act n = go n
 #ifdef __USE_HASTE_FOREIGN__
 
 #ifdef __USE_TIGHT_LOOP__
-main = times (call f) 1000
+main = times (call f) 500000
 #else
-main = mapM_ (\_ -> call f) [1..1000::Int]
+main = mapM_ (\_ -> call f) [1..500000::Int]
 #endif
 
 #else
 
 #ifdef __USE_TIGHT_LOOP__
-main = times (wrap f >>= fficall) 1000
+main = times (wrap f >>= fficall) 500000
 #else
-main = mapM_ (\_ -> wrap f >>= fficall) [1..1000::Int]
+main = mapM_ (\_ -> wrap f >>= fficall) [1..500000::Int]
 #endif
 
 

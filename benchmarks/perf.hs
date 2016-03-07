@@ -3,20 +3,21 @@ import Haste
 import Haste.Foreign
 
 #ifdef __USE_HASTE_FOREIGN__
+import Safe
 
 f :: Double -> Double -> Double -> Double -> Double -> IO Double
 f = ffi "(function(a,b,c,d,e){return 0;})"
 
 #else
 
-foreign import ccall f :: Double -> Double -> Double -> Double -> Double -> IO Double
+foreign import stdcall f :: Double -> Double -> Double -> Double -> Double -> IO Double
 
 #endif
 
 #ifdef __USE_TIGHT_LOOP__
 
 theTest = do
-  n <- for 200000000 $ \n -> f 1 2 3 4 n
+  n <- for 500000 $ \n -> f 1 2 3 4 n
   print n
 
 #else

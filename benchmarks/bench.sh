@@ -1,10 +1,10 @@
 #!/bin/sh
 
 # How many runs?
-TIMES=50
+TIMES=20
 
 # Common Haste args
-ARGS="--opt-whole-program --onexec -o out.js"
+ARGS="--opt-all --onexec -o out.js"
 
 # Haste.Foreign args
 HFARGS="-D__USE_HASTE_FOREIGN__"
