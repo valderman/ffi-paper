@@ -133,61 +133,42 @@ getCTimeval = with (MkCTimeval 0 0) $ \ptval -> do
 
 This code snippet is more akin to thinly veiled C code than idiomatic, readable
 Haskell; an unfortunate reality of working with the standard foreign function
-interface.
-While Haste initially made use of the conventional Foreign Function Interface
-extension\ \cite{ffi} to interface with its browser target environment,
-this presented certain difficulties.
+interface. When using compilers such as Haste\ \cite{haste} and
+GHCJS\ \cite{ghcjs} -- Haskell compilers which target the web browser -- the
+situation is even worse.
 The modern web browser environment is highly reliant on callback functions and
-complex data types, none of which are trivial to pass through the FFI,
-making browser-interfacing Haste code relatively clunky and byzantine.
-
-To rectify this situation, we construct a more expressive FFI on top of the
-old one. We decompose interactions with the host environment into their
-constituent parts: marshalling arguments into the target language,
-performing the actual foreign call,
-and finally marshalling the result back into Haskell.
-We implement these parts in Haskell itself to the extent possible,
-only reaching out to the host environment through the FFI for our lowest level
-building blocks. The result is a foreign function interface which to a high
-degree automates the tedium involved in communicating with a foreign
-environment.
+complex data types, none of which are trivial to pass through the FFI;
+the user has a wealth of high-level JavaScript libraries within arm's reach,
+but is forced to go through the low-level gateway of
+the Haskell FFI\ \cite{ffi} to touch them.
+While the example given in figure \ref{lst:bad-ffi} certainly works when
+compiled with either Haste or GHCJS, it is not something the user would like
+to write.
 
 Traditionally, Haskell programs have used the Foreign Function Interface
 extension to communicate with other languages. This works
 passably well in the world of native binary programs running on bare metal,
 where C calling conventions have become the de facto standard of foreign
 data interchange.
-The C language has no notion of higher level data structures or
+The C language has no notion of higher-level data structures or
 fancy data representation, making it the perfect lowest common denominator
 interlingua for language to language communication:
 there is no ambiguity or clash between different languages' built-in
-representation of various higher level data structures, as there simply
-\emph{are} no higher level data structures on the interface level.
-
-With the rise of the web browser as a major application platform, however,
-a whole new breed of dialects of Haskell and other functional
-programming languages have emerged, targeting not only JavaScript and the
-web browser platform, but other high level languages as well.
-New languages like Idris\ \cite{idris} offer a multitude of backends,
-some of which target high level environments, and compilers like \emph{Haste}\
-\cite{haste} and
-\emph{Ocsigen}\ \cite{ocsigen} take advantage of multiple backends and
-\emph{program slicing} to produce programs which run concurrently
-distributed over a high level context on the browser-based client and a
-traditional, down-to-the-metal one on the server.
+representation of various higher-level data structures, as there simply
+\emph{are} no higher-level data structures on the interface level.
 
 The same properties that make Haskell's traditional foreign function interface
 a good fit for language interoperability make it undesirable as a vehicle for
-interfacing with the web-targeting code produced by these compilers: the guest
-language commonly relies on the browser environment for a large part of its
-runtime and internally uses many of its native high level data structures and
-representations, making the forced low level representations of the vanilla
-foreign function interface an unnecessary obstacle rather than a welcome
-common ground for data interchange.
+interfacing with the web-targeting code produced by compilers such as Haste
+and GHCJS: said Haskell implementations commonly rely on the browser environment
+for a large part of their runtime and internally use many of its native
+high-level data structures and representations, making the forced low-level
+representations of the vanilla foreign function interface an unnecessary
+obstacle rather than a welcome common ground for data interchange.
 
-With this background, we believe that low level interfaces such as the
-vanilla FFI are not ideally suited  to the domain of functional languages
-targeting the web browser and other high level environments.
+With this background, we believe that low-level interfaces such as the
+vanilla FFI are not ideally suited to the domain of functional languages
+targeting the web browser or other high-level environments.
 More specifically, we would like a foreign function interface for this domain
 to have the following properties:
 
@@ -200,12 +181,15 @@ to have the following properties:
   Users should be able to easily define their own marshalling schemes for
   arbitrary types.
 \item
-  The FFI should allow importing arbitrary host language code, not just named,
-  statically known functions.
+  The FFI should allow importing arbitrary snippets of foreign code, not just
+  named, statically known functions. This allows users to efficiently compose
+  code from different libraries in a single import,
+  as well as transform data which may be inefficient or cumbersome to import
+  into Haskell as-is.
 \item
   Finally, the FFI should be easy to implement and understand, ideally being
-  implementable without compiler modifications, portable across guest
-  language dialects and host environments.
+  implementable without compiler modifications, portable across Haskell
+  implementations targeting high-level environments.
 \end{itemize}
 
 Making this list a bit more concrete in the form of an example, we would like
@@ -235,8 +219,8 @@ Contrasting this with the standard FFI code from figure \ref{lst:bad-ffi}:
 
 \begin{itemize}
 \item
-  The low level C types are gone, replaced by a more descriptive record type,
-  and so is the \lstinline!peek!ing and \lstinline!poke!ing of pointers.
+  The low-level machine types are gone, replaced by a more descriptive record
+  type, and so is the \lstinline!peek!ing and \lstinline!poke!ing of pointers.
 \item
   The imported function arrives ``batteries included'', on equal footing with
   every other function in our program. No extra scaffolding or boilerplate
@@ -245,8 +229,8 @@ Contrasting this with the standard FFI code from figure \ref{lst:bad-ffi}:
   Whereas the code in figure \ref{lst:bad-ffi} had to import the
   \lstinline!gettimeofday! system call by name, its actual implementation
   given elsewhere, we have actually \emph{implemented} its JavaScript
-  counterpart at the location of its import, without having to resort to
-  external stubs.
+  counterpart at the location of its import from the building blocks
+  available to us, without having to resort to external stubs.
 \end{itemize}
 
 To be clear, the idea of a higher level foreign function interface is by no
