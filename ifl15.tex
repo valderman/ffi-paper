@@ -1264,6 +1264,11 @@ process as a whole grows heavier.
 Judging by these numbers the performance of our library is quite acceptable,
 with the exception of the heavy toll taken by the exception marshaller on
 the less complex marshalling cases.
+Interestingly, the optimization described in section \ref{sec:inline-eval}
+does not impact performance measurably in these benchmarks. If any
+performance benefit is to be had from this optimization, is will likely come
+from increased opportunities for minifiers and JavaScript engines to perform
+inlining over more complex programs.
 
 It is encouraging that our interface's intended use case - marshalling
 more complex types and higher order functions - is showing tangible performance
