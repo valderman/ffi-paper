@@ -66,7 +66,7 @@
 \begin{abstract}
   We present a novel yet simple foreign function interface, designed for
   web-targeting Haskell dialects but also applicable to a wider range of
-  high level target languages.
+  high-level target languages.
   The interface automates marshalling, eliminates boilerplate
   code, allows increased sanity checking of external data,
   allows the import of functions as well as arbitrary expressions of host
@@ -77,7 +77,7 @@
   Haste compiler, and show how the basic implementation can be
   further optimized with minimal effort to perform on par with Haskell's
   vanilla foreign function interface, as well as extended to support automatic
-  marshalling of higher order functions and automatic marshalling of host
+  marshalling of higher-order functions and automatic marshalling of host
   language exceptions.
   We also discuss how the interface can be implemented across a larger range
   of host environments and target languages at the cost of a slight increase in
@@ -288,7 +288,7 @@ concerns about our implementation, and show how these concerns can be
 alleviated by reaching outside the confines of Haskell '98.
 
 In section \ref{sec:extensions} we show the flexibility of our design by using
-it to implement marshalling of higher order functions between the Haskell and
+it to implement marshalling of higher-order functions between the Haskell and
 JavaScript, as well as a mechanism for automatically marshalling JavaScript
 exceptions into Haskell equivalents.
 We also discuss how to remove dynamic code evaluation from the equation
@@ -383,7 +383,7 @@ host language functions using the interface described in figure
 \end{code}
 
 To further illustrate how this interface can be used to effortlessly import
-even higher order foreign functions, we have used our library to
+even higher-order foreign functions, we have used our library to
 implement bindings to JavaScript \emph{animation frames} for the Haste
 compiler, a mechanism whereby a user program may request the browser to call
 a certain function before the next repaint of the screen occurs:
@@ -401,7 +401,7 @@ a certain function before the next repaint of the screen occurs:
 \end{code}
 
 The resulting code is straightforward and simple, even though it performs
-the rather non-trivial task of importing a foreign higher order function,
+the rather non-trivial task of importing a foreign higher-order function,
 automatically converting user-provided Haskell callbacks to their JavaScript
 equivalents.
 
@@ -536,7 +536,7 @@ It is worth noting that the implementation of \lstinline!getMember! is
 the reason for \lstinline!fromAny! returning a value in the \lstinline!IO!
 monad: foreign data structures are rarely, if ever, guaranteed to be immutable
 and looking up a key in a dictionary is effectively following a reference,
-so we must perform any such lookups at a well defined point in time,
+so we must perform any such lookups at a well-defined point in time,
 lest we run the risk of the value being changed in between the application
 of our marshalling function and the evaluation of the resulting thunk.
 
@@ -917,9 +917,9 @@ applied, \lstinline!fromAny! will be applied unsafely to each of the
 marshalled function's arguments. There are two cases
 when this can happen: either the marshalled function is called from the host
 language, or it is marshalled back into Haskell and then applied.
-In the former case, the time of the call is trivially well defined assuming
+In the former case, the time of the call is trivially well-defined assuming
 that our target language is not lazy by default.
-In the latter case, the time of the call is still well defined, as our
+In the latter case, the time of the call is still well-defined, as our
 interface only admits importing functions in the \lstinline!IO! monad.
 
 Slightly more troubling is the use of \lstinline!unsafePerformIO! in
@@ -1074,7 +1074,7 @@ In the basic Haste.Foreign interface, such exceptions must be manually handled
 lest they terminate the enclosing Haskell program much like a segmentation
 fault in imported C code would terminate a native Haskell program.
 
-Thankfully, we can leverage the higher order import capabilities described
+Thankfully, we can leverage the higher-order import capabilities described
 in section \ref{sec:extensions} to catch JavaScript exceptions and re-throw
 them within Haskell's exception handling framework.
 We import a JavaScript function \lstinline!catchJS! which accepts an
@@ -1163,11 +1163,11 @@ To this end, several microbenchmarks were devised:
   returning the current time, in order to measure outbound marshalling of
   product types as well as inbound.
 \item
-  \emph{HOF import}, which calls a higher order function $f$ using
+  \emph{HOF import}, which calls a higher-order function $f$ using
   both the vanilla FFI and our method, with a function over a
   single \lstinline!Double! value as its argument.
   The only purpose of $f$ is to call its argument repeatedly,
-  evaluating the speed with which a higher order Haskell function may be called
+  evaluating the speed with which a higher-order Haskell function may be called
   from external code in addition to the speed of marshalling itself.
 \end{itemize}
 
@@ -1224,7 +1224,7 @@ eking out a tiny performance benefit.
 In contrast, the performance hit when using the exception-safe version defined
 in section \ref{sec:marshalling-exceptions} is huge.
 This is by no means surprising: using the exception-safe version entails
-marshalling no less than two additional higher order functions, which is quite
+marshalling no less than two additional higher-order functions, which is quite
 a bit heavier than the otherwise very lightweight marshalling performed for
 plain numbers.
 
@@ -1271,7 +1271,7 @@ from increased opportunities for minifiers and JavaScript engines to perform
 inlining over more complex programs.
 
 It is encouraging that our interface's intended use case - marshalling
-more complex types and higher order functions - is showing tangible performance
+more complex types and higher-order functions - is showing tangible performance
 benefits in addition to the added convenience it affords the user.
 For code which has no choice but to make a large number of calls to
 low level host language functions over primitive types in performance critical
