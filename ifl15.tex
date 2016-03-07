@@ -69,16 +69,18 @@
   high level target languages.
   The interface automates marshalling, eliminates boilerplate
   code, allows increased sanity checking of external data,
-  is implementable as a plain Haskell '98 library across a range of
-  Haskell compilers and host environments without any modification to the
-  compiler or environment.
+  allows the import of functions as well as arbitrary expressions of host
+  language code, and is implementable as a plain Haskell '98 library
+  without any modification to the Haskell compiler or environment.
   
   We give an implementation of this interface for the JavaScript-targeting
   Haste compiler, and show how the basic implementation can be
   further optimized with minimal effort to perform on par with Haskell's
   vanilla foreign function interface, as well as extended to support automatic
-  marshalling of functions and modified to support a larger range of host
-  environments and target languages at the cost of a slight increase in
+  marshalling of higher order functions and automatic marshalling of host
+  language exceptions.
+  We also discuss how the interface can be implemented across a larger range
+  of host environments and target languages at the cost of a slight increase in
   implementation complexity.
 \end{abstract}
 
