@@ -264,23 +264,24 @@ implemented entirely without compiler modifications.
 
 \paragraph{Our contribution}\label{sec:contrib}
 In section \ref{sec:interface}, we present a novel interface for a web-targeting
-Haskell dialect to interface with its host environment at a high level of
+Haskell dialect to interface with its JavaScript host environment at a high level of
 abstraction, and describe its implementation for the Haste compiler.
+The interface lets users import arbitrary host language expressions in addition
+to the named functions traditionally importable through Haskell's FFI.
+This enables users to create efficient bindings to foreign code with a potentially
+high impedance mismatch without having to pay with excessive boilerplate code.
+It allows for context dependent sanity checking of incoming data from the host
+language, improving the safety of foreign functions.
+
+The interface makes use of dynamic code evaluation and the fact that
+JavaScript -- the ``machine language'' of the web -- is intended for human
+consumption to achieve a surprisingly lightweight implementation, which does
+not rely on modifications to the Haskell compiler.
 
 The basic interface is implementable using plain Haskell '98 with the
 Foreign Function Interface extension, and is extensible by the user in the
 types of data which can be marshalled between Haskell and host language,
 as well as in how those types are marshalled.
-It allows for context dependent sanity
-checking of incoming data from the host language, improving the safety
-of foreign functions.
-
-While designed and described for web-targeting Haskell dialects, the interface
-is applicable outside the web domain as well, and the implementation we give
-is valid for dynamically typed host languages that support garbage collection,
-first class functions, and a construct for dynamic code evaluation at
-runtime such as the \lstinline!eval! function of JavaScript, Python, PHP,
-and others.
 
 In section \ref{sec:optimizations} we discuss various safety and performance
 concerns about our implementation, and show how these concerns can be
@@ -288,9 +289,9 @@ alleviated by reaching outside the confines of Haskell '98.
 
 In section \ref{sec:extensions} we show the flexibility of our design by using
 it to implement marshalling of higher order functions between the Haskell and
-JavaScript, and use the GHC generics extension to implement a default
-marshalling behavior for any Haskell type. We also discuss how to lift the
-requirement that the host language supports dynamic code evaluation at runtime
+JavaScript, as well as a mechanism for automatically marshalling JavaScript
+exceptions into Haskell equivalents.
+We also discuss how to remove dynamic code evaluation from the equation
 with a slight modification to the Haskell compiler in use.
 
 \section{An FFI for the modern web}\label{sec:interface}
