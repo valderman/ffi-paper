@@ -1049,107 +1049,87 @@ a conspicuous absence: the \lstinline!UTCTime! instance of \lstinline!FromAny!
 is not defined, yet it is still used by the \lstinline!host! function in the
 definition of \lstinline!getCurrentTime!. Although the instance can be defined
 in a single line of code, it would still be nice if we could avoid the tedium
-of writing that one line altogether. Thanks to generic programming and default
-type class instances, we can.
+of writing that one line altogether. As stated in section
+\ref{sec:marshalling}, any non-arrow Haskell type can be represented using
+a combination of arrays and dictionaries. Using one of the generic programming
+frameworks offered by Haskell, such as GHC generics\ \cite{generics} or
+Template Haskell\ \cite{th}, it is possible to create a \emph{default instance}
+of the marshalling type classes, applicable to any Haskell type.
 
-Our implementation of generic marshalling uses GHC generics\ \cite{generics}
-and associated language extensions -- most notably type operators and scoped
-type variables -- making it specific to GHC-based compilers such as Haste and
-GHCJS\ \cite{ghcjs}. GHC generics allow us to traverse values of any type
-as though the type was uniformly defined as a tree of sums, products,
-constants and metadata, such as record selectors or constructor names.
+As the implementation of such an instance is neither novel nor particularly
+interesting in the context of this paper, we refer the reader to the one
+used by the \emph{aeson} package for encoding and decoding of
+JSON values\ \cite{aeson}. This default instance provides the final piece
+of the puzzle required to use the interface as presented in
+figure \ref{lst:good-ffi}.
 
-For the sake of brevity, and as the actual syntax of GHC generics is
-relatively uninformative due to its generality, we only give the basic method
-of our implementation is this paper, and only consider the case of marshalling
-Haskell values into their host language counterparts.
-Marshalling in the other direction uses the same basic method,
-and the complete implementation is available from \cite{haste-lang.org}.
 
-We begin by defining a the data type to represent a host language value while
-it is being constructed. A value can be either a singleton, a list of
-values or a dictionary.\\
+\subsection{Marshalling JavaScript exceptions}
+\label{sec:marshalling-exceptions}
+Trapping errors in foreign C code is relatively straightforward, albeit
+cumbersome, owing to the relative absence of structured error handling in C.
+However, when interacting with a higher level language, one must take into
+account the risk of exceptions being raised in any imported foreign code.
+In the basic Haste.Foreign interface, such exceptions must be manually handled
+lest they terminate the enclosing Haskell program much like a segmentation
+fault in imported C code would terminate a native Haskell program.
+
+Thankfully, we can leverage the higher order import capabilities described
+in section \ref{sec:extensions} to catch JavaScript exceptions and re-throw
+them within Haskell's exception handling framework.
+We import a JavaScript function \lstinline!catchJS! which accepts an
+exception handler function and an IO computation as its arguments.
+When called, \lstinline!catchJS! executes IO computation inside a try-catch
+block. If an exception is raised, it is passed to the exception handler
+function which then takes appropraite action.
+
+\lstinline!catchJS! may be used similarly to Haskell's \lstinline!catch!
+function to catch exceptions in foreign functions where they are expected to
+occur.
+However, it is not necessarily the case that we always want to handle
+exceptions right at the call site of a foreign function -- quite the opposite!
+Instead, we can create an exception-safe equivalent to \lstinline!host! which
+uses \lstinline!catchJS! to dispatch \emph{all} calls to functions imported
+through it, with an exception handler function that simply re-throws the
+JavaScript exception wrapped in a Haskell exception. The wrapped exception
+can then be caught anywhere a ``normal'' Haskell exception could be caught.
+A complete implementation of this extension is given in
+figure \ref{lst:catchJS}.
+
+\begin{listingfloat}
 \begin{code}
-  data Value
-    = One HostAny
-    | List [HostAny]
-    | Dict [(HostString, HostAny)]
-\end{code}\\
-We then informally define the behavior of our generic marshalling function
-\lstinline!gToAny :: Rep a -> Value! as follows, where \lstinline!Rep! is
-a type provided by \lstinline!GHC.Generics! to enable generic traversal
-of its type argument.
+  catchJS :: (ToAny a, FromAny a)
+          => (String -> IO ())
+          -> IO a -> IO a
+  catchJS = "(handle, act) =>\\
+    \\{ try        { return act(); }\\
+    \\  catch (ex) { handle(ex.toString()); }}"
 
-\begin{itemize}
-\item
-  When we reach a \emph{constructor argument} \lstinline!x! of a type
-  \lstinline!t! with a \lstinline!ToAny! instance, we use that instance to
-  marshal \lstinline!x! and return it as a single value:
-  \lstinline!One (toAny x)!.
-\item
-  When we reach a \emph{record selector} metadata node with a selector
-  name \lstinline!n! and a child node \lstinline!c!, we recursively marshal
-  \lstinline!c! and return it paired with its selector name:
-  \lstinline!Tree [(n, toAny x)]!.
-\item
-  When we reach a \emph{constructor} metadata node with a constructor name
-  name \lstinline!n! and a child node \lstinline!c!, we recursively marshal
-  \lstinline!c! and call the resulting value \lstinline!c'!.
-  \begin{itemize}
-  \item
-    If \lstinline!c'! is a \emph{dictionary}, we add an entry to it to mark the
-    value's constructor name and return the resulting dictionary:
-    \lstinline!Tree (("tag", toAny n) : c')!.
-  \item
-    If \lstinline!c'! is an \emph{empty list}, we simply return the constructor
-    name:
-    \lstinline!One (toAny n)!.
-  \item
-    If \lstinline!c'! is a nonempty \emph{list} or a \emph{single item},
-    we return a new dictionary consisting of the constructor tag and the
-    \lstinline!HostAny! encoding of \lstinline!c'!:\\
-    \lstinline!Tree [("tag", toAny n), ("data", toAny c')]!.
-  \end{itemize}
-\item
-  When we reach a \emph{product} node with child nodes \lstinline!c1! and
-  \lstinline!c2!, signifying the union of two or more constructor arguments,
-  we recursively marshal \lstinline!c1! and \lstinline!c2! into
-  \lstinline!c1'! and \lstinline!c2'! respectively. We then \emph{merge}
-  \lstinline!c1'! and \lstinline!c2'! and return the result:
-  \begin{code}
-    merge c1' c2'
-      where
-        merge (One a) (One b)   = List [a, b]
-        merge (List a) (One b)  = List (a ++ [b])
-        merge (One a) (List b)  = List (a : b)
-        merge (List a) (List b) = List (a ++ b)
-        merge (Tree a) (Tree b) = Tree (a ++ b)
-  \end{code}\\
-  Note that the case where a tree is merged with a non-tree is undefined.
-  Trees arise \emph{only} from a use of record selectors. Haskell only
-  allows data constructors where either \emph{all} arguments have selectors,
-  or \emph{none} has, meaning that trees and non-trees will never appear in
-  the same product node.
-\item
-  When we reach a \emph{sum} node, signifying one of several data constructors
-  of a type, we will either have a \emph{left} child or a \emph{right} child.
-  We simply recurse down through whichever child node we have and return the
-  result.
-\end{itemize}
+  data HostException = HostException String
+    deriving Show
+  instance Exception HostException
+  
+  class Safely a where
+    safely :: a -> a
 
-Using this implementation, all that remains is to add a default instance to
-the \lstinline!ToAny! class.\\
-\begin{code}
-  class ToAny a where
-    toAny :: a -> HostAny
-    default toAny :: (GToAny (Rep a), Generic a)
-                  => a -> HostAny
-    toAny x =
-      case gToAny (from x) of
-        One x   -> x
-        List xs -> toAny xs
-        Tree d  -> mkDict d
-\end{code}\\
+  instance Safely b => Safely (a -> b) where
+    safely f x = safely (f x)
+
+  instance (FromAny a, ToAny a) => Safely (IO a) where
+    safely m = catchJS (throwIO . HostException)
+
+  very_safe_host :: Import a => StaticPtr String -> a
+  very_safe_host = safely safe_host
+\end{code}
+\caption{Marshalling JavaScript exceptions}
+\label{lst:catchJS}
+\end{listingfloat}
+
+It should be noted that this approach incurs a performance penalty due to the
+extra function call and marshalling required to dispatch a function, as further
+discussed in section \ref{sec:performance}.
+
+
 \section{Performance}
 \label{sec:performance}
 While increased performance is not a major motivation for this work, it is
@@ -1183,7 +1163,7 @@ To this end, several microbenchmarks were devised:
   returning the current time, in order to measure outbound marshalling of
   product types as well as inbound.
 \item
-  \emph{Higher order import}, which calls a higher order function $f$ using
+  \emph{HOF import}, which calls a higher order function $f$ using
   both the vanilla FFI and our method, with a function over a
   single \lstinline!Double! value as its argument.
   The only purpose of $f$ is to call its argument repeatedly,
@@ -1191,17 +1171,19 @@ To this end, several microbenchmarks were devised:
   from external code in addition to the speed of marshalling itself.
 \end{itemize}
 
-These functions were then repeatedly applied in two different contexts: one
+These functions were then applied 500 000 times in two different contexts: one
 tight, strict, tail recursive loop, intended to produce as efficient code
 as possible; and one which simply consists of running \lstinline!mapM_! over
-a list of appropriate length, to obtain higher level code which is harder to
+a list containing 500 000 elements, to obtain higher level code which is harder to
 optimize and analyse for strictness.
 
-The resulting programs, compiled with the Haste compiler which incorporates all
-the optimizations described in section \ref{sec:optimizations},
-were then repeatedly executed using the Node.js JavaScript interpreter,
+The resulting programs, compiled with version 0.5.4.2 of the Haste compiler
+which incorporates all the optimizations described in section \ref{sec:optimizations},
+were then repeatedly executed using version 4.2.2 of the Node.js JavaScript interpreter,
 and the average run times of the programs using our interface compared against
 the average run times of their FFI counterparts.
+The benchmarks were executed on a Lenovo ThinkPad X230 laptop running Debian GNU/Linux,
+equipped with an Intel i5 3210M CPU and 8 GB of RAM.
 
 While this may not be the most rigorous of performance evaluations,
 the results are repeatable, and the methodology is enough for our purposes:
@@ -1215,78 +1197,84 @@ FFI.
 \begin{table}
   \renewcommand{\arraystretch}{1.5}
   \begin{center}
-    \begin{tabular}{|r|c|l|}
+    \begin{tabular}{|r|r|r|l|}
       \hline
-                                   & Tight loop & \lstinline!mapM_! \\
+                    & Tight loop & \lstinline!mapM_! & Tight + exceptions\\
       \hline
-      Outbound                     & 1.00       & 1.16 \\
+      Outbound      & 0.98       & 1.07              & 8.21\\
       \hline
-      In-out                       & 1.00       & 1.05 \\
+      In-out        & 0.97       & 1.08              & 11.70\\
       \hline
-      Product types                & 0.07       & 0.37 \\
+      Product types & 0.83       & 0.95              & 2.42\\
       \hline
-      Higher order import          & 0.85       & 0.87 \\
+      HOF import    & 0.94       & 0.96              & 1.09\\
       \hline
     \end{tabular}
   \end{center}
-  \caption{Execution times compared to the vanilla FFI}
+  \caption{Execution times as fractions of FFI execution times}
   \label{tbl:performance}
 \end{table}
 
 \paragraph{Outbound}
 Looking at the performance numbers, our library performs surprisingly well in
-a highly optimized loop, showing no additional overhead over the vanilla FFI.
-In a less optimizable loop, our interface fares slightly worse.
-Due to our interface being
-implemented mainly as a pure Haskell library, the compiler is noticeably worse
-at figuring out the strictness properties of the program compiled using our
-library than with the program using the vanilla FFI, leading to some
-unnecessary creation and evaluation of thunks.
+both the highly optimized and less optimized loop cases, with the loose loop
+showing a modest 7 \% slowdown over the vanilla FFI, and the tight loop even
+eking out a tiny performance benefit.
+
+In contrast, the performance hit when using the exception-safe version defined
+in section \ref{sec:marshalling-exceptions} is huge.
+This is by no means surprising: using the exception-safe version entails
+marshalling no less than two additional higher order functions, which is quite
+a bit heavier than the otherwise very lightweight marshalling performed for
+plain numbers.
 
 \paragraph{In-out}
 Moving on to the benchmarks where we actually marshal incoming data, the
-picture is much the same as for the \emph{outbound} benchmark, with a slightly
-lower performance penalty for the \lstinline!mapM_! case. This is likely
-attributable to the extra overhead of storing and evaluating the inbound
-values for both versions.
+picture is much the same as for the \emph{outbound} benchmark. The performance
+hit from the exception marshaller becomes even more problematic here, as the
+return value of the function needs to be marshalled first into Haskell,
+then back into JavaScript for the exception handler, and finally back into
+Haskell again.
 
 \paragraph{Product types}
-Our interface shows a distinct performance advantage when it comes to
-marshalling more complex values, being as much as \emph{fourteen times} faster
-in the case of the highly optimized loop. Our assumption about
-\lstinline!peek!ing and \lstinline!poke!ing at pointers in an environment where
-such low level constructs need to be emulated rather than efficiently
-implemented on the machine level seems to have been correct.
+Our interface shows a small performance advantage when it comes to
+marshalling more complex values, being 5 -- 20 \% faster
+depending on the loop. Our assumption about peeking and poking at pointers
+being suboptimal in an environment where such operations are considerably
+more expensive than on bare metal seems to have been correct.
 
-This performance advantage is still present in the less optimized loop,
-although not quite as extreme. Inspecting the generated code,
-we see that this is caused by the loop in question having a
-much larger overhead - an indicator that the function calling overheads in
-both cases are relatively minor compared to other overheads present in the
-generated code.
+Worth noting is that the performance overhead of the exception marshaller
+becomes significantly less prohibitive in this benchmark, as the complexity
+of marshalling grows. This indicates that while expensive compared to
+the minimal marshalling required for base types, exception safety may not be
+all that expensive after all, when calling a function which performs actual
+work.
 
-\paragraph{Higher order import}
-Our interface seems to compare favorably to the vanilla FFI for this case.
-The reason for this is not immediately obvious: the two interfaces generate
-nearly identical code, the vanilla FFI code being slightly more concise.
-The slight performance difference turns out to be entirely implementation
-specific, however: the code generated for the vanilla FFI benchmark in some
-places pass numeric literals around where the code generated for our
-interface instead passes constant references to the same values.
-Eliminating this difference by modifying the generated code by hand, the
-performance difference between the two becomes negligible.
+\paragraph{HOF import}
+Our interface seems to compare favorably to the vanilla FFI for this case,
+although the performance gain difference is quite minimal. This is to be
+expected, as the heavy lifting required to export Haskell functions into
+JavaScript is relatively similar and quite heavy regardless of how the
+relatively lightweight marshalling of the function's base type arguments
+is carried out. Again, it is worth pointing out how the significance of the
+exception marshaller's performance penalty dwindles as the marshalling
+process as a whole grows heavier.
 
 \paragraph{Performance verdict: acceptable}
 Judging by these numbers the performance of our library is quite acceptable,
-ranging from significantly faster than the vanilla FFI to at most about 15\%
-slower. It is encouraging that our interface's intended use case - marshalling
-more complex type - is showing tangible performance benefits in addition to
-the added convenience it affords the user.
+with the exception of the heavy toll taken by the exception marshaller on
+the less complex marshalling cases.
+
+It is encouraging that our interface's intended use case - marshalling
+more complex types and higher order functions - is showing tangible performance
+benefits in addition to the added convenience it affords the user.
 For code which has no choice but to make a large number of calls to
 low level host language functions over primitive types in performance critical
-loops, using the vanilla FFI instead may be an attractive option to
-reduce the performance penalty - however slight - incurred by our
-interface, allowing the user to have the FFI cookie and eat it at the same time.
+loops, using the vanilla FFI instead, or at least handling JavaScript
+exceptions in foreign code instead of relying on our library's exception
+marshaller, may be an attractive option to
+reduce the performance penalty incurred by our interface in unfavorable circumstances,
+allowing the user to have the FFI cookie and eat it at the same time.
 
 The benchmarks used here are available online from our repository at
 \url{https://github.com/valderman/ffi-paper}.
@@ -1627,10 +1615,11 @@ This work has been partially funded by the Swedish Foundation for Strategic Rese
   2015-04-01.
 \bibitem[Balat, Chambart, Henry (2012)]{ocsigen}
   Balat, Vincent, Chambart, Pierre, and Henry, Grégoire.
-  "Client-server Web applications with Ocsigen." In WWW2012, p. 59. 2012.
+  Client-server Web applications with Ocsigen.
+  In WWW2012, p. 59. 2012.
 \bibitem[Brady (2015)]{idris}
   Brady, Edwin.
-  "Cross-platform Compilers for Functional Languages."
+  Cross-platform Compilers for Functional Languages.
   Under consideration for Trends in Functional Programming, 2015.
 \bibitem[Chakravarty et al (2003)]{ffi}
   Chakravarty, M. M. (Ed.). (2003).
@@ -1690,6 +1679,10 @@ This work has been partially funded by the Swedish Foundation for Strategic Rese
   Nazarov, V., Mackenzie, H., \& Stegeman, L.
   "GHCJS Haskell to JavaScript Compiler".
   Available from \url{https://github.com/ghcjs/ghcjs}, (2014-05-14).
+\bibitem[O'Sullivan (2011)]{aeson}
+  O'Sullivan, B. (2011).
+  The {\tt aeson} package
+  Available from \url{http://hackage.haskell.org/package/aeson-0.11.1.0/}, (2016-02-29).
 \bibitem[Plasmeijer, van Eekelen (2002)]{clean}
   Plasmeijer, R., \& van Eekelen, M.
   "Clean language report version 2.1".
@@ -1702,6 +1695,10 @@ This work has been partially funded by the Swedish Foundation for Strategic Rese
   Malloc pointers and stable pointers: Improving Haskell's foreign language
   interface.
   In Glasgow Functional Programming Workshop Draft Proceedings, Ayr, Scotland.
+\bibitem[Sheard, Peyton Jones (2002)]{th}
+  Sheard, T., \& Jones, S. P. (2002, October).
+  Template meta-programming for Haskell.
+  In Proceedings of the 2002 ACM SIGPLAN workshop on Haskell (pp. 1-16). ACM.
 \bibitem[Yakeley, 2014]{time}
   Yakeley, A.
   The \emph{time} package.
