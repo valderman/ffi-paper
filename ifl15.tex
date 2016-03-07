@@ -207,9 +207,9 @@ having to make intrusive changes to our Haskell compiler.
 
   getCurrentTime :: IO UTCTime
   getCurrentTime =
-    host "() => {var ms = new Date().getTime();
-                \\return {secs:  ms/1000,\\
-                \\        usecs: (ms % 1000)*1000};}"
+    host "() => {var ms = new Date().getTime();\
+                \return {secs:  ms/1000,\
+                \        usecs: (ms % 1000)*1000};}"
 \end{code}
 \caption{Foreign imports using our FFI}
 \label{lst:good-ffi}
