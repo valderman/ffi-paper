@@ -603,6 +603,8 @@ When $f$ is fully applied and we reach the base case -- a nullary computation
 in the \lstinline!IO! monad -- the \lstinline!HostFun! provided to
 \lstinline!import_! is shipped off to JavaScript via the vanilla FFI to be
 applied to the list of arguments built up during the recursion.
+After \lstinline!apply! returns, its return value is marshalled back into
+Haskell through \lstinline!fromAny! and returned to the caller of $f$.
 The \lstinline!apply! function which performs the actual application is very
 simple:
 
@@ -611,9 +613,6 @@ function(f, args) {
   return f.apply(null, args);
 }
 \end{code}
-
-After \lstinline!apply! returns, its return value is marshalled back into
-Haskell and returned to the caller of $f$.
 
 With this, we have all the building blocks required to implement the
 \lstinline!host! function. With all the hard work already done, the
