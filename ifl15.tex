@@ -1034,9 +1034,11 @@ instance (ToAny a, Host a ~ HostAny) =>
 
 instance (FromAny a, Exportable b) =>
           ToAny (a -> b) where
+  {-# NOINLINE toAny #-}
   toAny = unsafePerformIO . hsfun_to_host
 
 instance ToAny a => ToAny (IO a) where
+  {-# NOINLINE toAny #-}
   toAny = unsafePerformIO . hsfun_to_host
 \end{code}
 \caption{Dynamic function exports implemented on top of our interface}
@@ -1628,20 +1630,16 @@ safety of our interface
 and lightening the restrictions placed on the host environment, and implemented
 our interface as a library for the Haste Haskell-to-JavaScript compiler.
 Finally, we have used this library to further extend our marshalling
-capabilities to cover functions, as well as generic default marshalling for
-arbitrary data types, contrasted our approach with a variety of existing
-foreign function interfaces, and demonstrated that our library does not
-introduce excessive performance overhead compared to the vanilla FFI.
+capabilities to cover functions and foreign exceptions, contrasted our approach
+with a variety of existing foreign function interfaces, and demonstrated that
+our library does not introduce excessive performance overhead compared to
+the vanilla FFI.
 
 While our interface is currently not applicable to Haskell implementations
 targeting low level, C-like environments, it brings significant reductions in
 boilerplate code and complexity for users needing to interface their Haskell
 programs with their corresponding host environment in the space where it
-\emph{is} applicable: Haskell implementations for high level target platforms.
-
-Our reference implementation is shipped in both source code and binary form as
-part of the Haste distribution, available from the Haste website
-at\ \cite{haste-lang.org}.
+\emph{is} applicable: web-targeting Haskell implementations.
 
 \acks
 This work has been partially funded by the Swedish Foundation for Strategic Research, under grant RAWFP. Many thanks to Koen Claessen, Emil Axelsson and Atze van der Ploeg for their valuable feedback and comments.
@@ -1705,9 +1703,6 @@ This work has been partially funded by the Swedish Foundation for Strategic Rese
   Epstein, J., Black, A. P., \& Peyton Jones, S. (2011, September).
   Towards Haskell in the cloud.
   In ACM SIGPLAN Notices (Vol. 46, No. 12, pp. 118-129). ACM.
-\bibitem[The Haste language website (2015)]{haste-lang.org}
-  The Haste language website.
-  Available from \url{http://haste-lang.org}, 2015-05-14.
 \bibitem[Mainland (2007)]{quasiquotes}
   Mainland, G. (2007, September).
   Why it's nice to be quoted: quasiquoting for haskell.
