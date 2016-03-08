@@ -352,21 +352,6 @@ host :: Import f => String -> f
 \label{lst:interface}
 \end{listingfloat}
 
-These definitions give rise to a workflow for interacting with host
-language code:
-\begin{itemize}
-\item
-  define the appropriate \lstinline!ToAny! and \lstinline!FromAny! instances
-  for any custom types, either automatically using the generic default instances
-  as showcased by our motivating example in figure \ref{lst:good-ffi},
-  or by defining them manually if a particular host language representation is
-  desired; then
-\item
-  import arbitrary host language symbols or expressions over
-  any set of types instantiating \lstinline!ToAny! and \lstinline!FromAny!,
-  using the \lstinline!host! function.
-\end{itemize}
-
 At first glance, it might seem strange to separate \lstinline!ToAny!
 and \lstinline!FromAny! instead of merging them into a single
 \lstinline!Marshal! class. The reason for this is that merging the two classes
