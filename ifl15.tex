@@ -435,7 +435,7 @@ implementation or internal representation of the base types.
 
 We might also find a \lstinline!HostAny! instance for \lstinline!ToAny!
 and \lstinline!FromAny! handy. Of course, \lstinline!HostAny! already being
-in its host language representation form, the instances are trivial.
+in its JavaScript representation form, the instances are trivial.
 
 \begin{code}
 instance ToAny   HostAny where toAny   = id
@@ -447,9 +447,9 @@ no need to look any further than the vanilla foreign function interface.
 We must also provide some way of combining values into more complex values,
 to be able to represent lists, record types and other conveniences we take for
 granted in our day to day development work.
-But how should these values be combined?
+But how should these values be marshalled?
 
-Fortunately, JavaScript, supports two basic types, which are
+JavaScript, supports two basic types, which are
 sufficient to represent values of any non-arrow type: arrays and dictionaries.
 
 Converting Haskell lists into arrays is a relatively straightforward affair.
@@ -478,7 +478,7 @@ we want to convert, the structure of our desired host language representation
 of two values may well be different even when their Haskell
 representations are quite similar, or even identical.
 Hence, we need to put the power over this decision into the hands of the user,
-providing functionality to build as well as inspect user-defined dictionaries.
+providing functionality to build as well as inspect dictionaries.
 
 We will need three basic host language operations: creating a new dictionary,
 associating a dictionary key with a particular value, and looking up values
@@ -538,8 +538,9 @@ getMember dict key =
 \label{lst:dicts}
 \end{listingfloat}
 
-This gives us the power to represent any composite or primitive data
-type with user-defined dictionary keys. Figure \ref{lst:sumprod} shows a
+Together with the previously defined instances for base types, this gives us
+the power to marshal any non-arrow data type into an equivalent
+\lstinline!HostAny! value and back again. Figure \ref{lst:sumprod} shows a
 possible marshalling for sum and product types using the aforementioned
 dictionary operations.
 
