@@ -1016,6 +1016,12 @@ for our type level recursion to work out when marshalling pure functions,
 but we can prevent this instance from leaking to \lstinline!ToAny! where it
 would be unreasonably broad by replacing our \lstinline!ToAny! function
 instance with two slightly more specific ones.
+This is the reason for having two separate type classes for marshalling
+data into and out of Haskell. We need to be able to \emph{export} pure
+functions from Haskell while for safety reasons not allowing them to be
+\emph{imported}, and we want to avoid creating the problematic unlimited
+export instance described above; forcing importable types to be
+exportable and vice versa disallows both.
 
 Figure \ref{lst:export-final} gives our final implementation of dynamic
 function exports.
