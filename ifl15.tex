@@ -69,8 +69,8 @@
   high-level target languages.
   The interface automates marshalling, eliminates boilerplate
   code, allows increased sanity checking of external data,
-  allows the import of functions as well as arbitrary expressions of host
-  language code, and is implementable as a plain Haskell '98 library
+  allows the import of functions as well as arbitrary expressions of
+  JavaScript code, and is implementable as a plain Haskell '98 library
   without any modification to the Haskell compiler or environment.
   
   We give an implementation of this interface for the JavaScript-targeting
@@ -79,9 +79,8 @@
   vanilla foreign function interface, as well as extended to support automatic
   marshalling of higher-order functions and automatic marshalling of host
   language exceptions.
-  We also discuss how the interface can be implemented across a larger range
-  of host environments and target languages at the cost of a slight increase in
-  implementation complexity.
+  We also discuss how the interface may be extended beyond the web domain and
+  implemented across a larger range of host environments and target languages.
 \end{abstract}
 
 \category{D.1.1}{Programming Techniques}{Applicative (functional) Programming}
@@ -250,12 +249,14 @@ implemented entirely without compiler modifications.
 In section \ref{sec:interface}, we present a novel interface for a web-targeting
 Haskell dialect to interface with its JavaScript host environment at a high level of
 abstraction, and describe its implementation for the Haste compiler.
-The interface lets users import arbitrary host language expressions in addition
-to the named functions traditionally importable through Haskell's FFI.
+The interface lets users import arbitrary JavaScript expressions in addition
+to the named functions traditionally importable through Haskell's FFI, exploiting
+JavaScript's built-in lambda abstraction for parameter interpolation in lieu of
+heavier and less portable solutions like antiquotes.
 This enables users to create efficient bindings to foreign code with a potentially
 high impedance mismatch without having to pay with excessive boilerplate code.
-It allows for context dependent sanity checking of incoming data from the host
-language, improving the safety of foreign functions.
+It allows for context dependent sanity checking of incoming data,
+improving the safety of foreign functions.
 
 The interface makes use of dynamic code evaluation and the fact that
 JavaScript -- the ``machine language'' of the web -- is intended for human
@@ -265,8 +266,8 @@ to our knowledge, we are the first to perform.
 
 The basic interface is implementable using plain Haskell '98 with the
 Foreign Function Interface extension, and is extensible by the user in the
-types of data which can be marshalled between Haskell and host language,
-as well as in how those types are marshalled.
+types of data which can be marshalled as well as in how said marshalling is
+performed.
 
 In section \ref{sec:optimizations} we discuss various safety and performance
 concerns about our implementation, and show how these concerns can be
@@ -454,7 +455,7 @@ sufficient to represent values of any non-arrow type: arrays and dictionaries.
 
 Converting Haskell lists into arrays is a relatively straightforward affair.
 We need two functions: one to create a new, empty array, and one to push a
-new value onto the end of the array.\
+new value onto the end of the array.%
 \footnote{JavaScript arrays are quite a different beast from ``actual'' arrays
   as seen in C, making the push operation more efficient than one would normally
   expect.
@@ -462,16 +463,6 @@ new value onto the end of the array.\
 Converting arrays back into lists is similarly easy: we simply need to obtain
 the array's length, and read the requisite number of elements back into
 Haskell, building a list as we go along.
-
-For the sake of brevity, we assume that we have
-access to a pair of functions
-\lstinline!arrToList :: ToAny a => HostAny -> IO [a]!
-and \lstinline!listToArr :: FromAny a => [a] -> HostAny!
-which are used to implement the marshalling instance for lists;
-they are trivial to implement either in Haskell using the vanilla foreign
-function interface to gradually build a list of \lstinline!HostAny! values,
-or on the host language side exploiting knowledge of the compiler's
-data representation.
 
 For dictionaries, the conversion is not as clear-cut. Depending on the data
 we want to convert, the structure of our desired host language representation
@@ -482,8 +473,8 @@ providing functionality to build as well as inspect dictionaries.
 
 We will need three basic host language operations: creating a new dictionary,
 associating a dictionary key with a particular value, and looking up values
-from dictionary keys. From these we construct two functions to marshal compound
-Haskell values to and from dictionaries: \lstinline!mkDict!
+from dictionary keys. From these we construct two functions to marshal sum and
+product types to and from dictionaries: \lstinline!mkDict!
 and \lstinline!getMember!, as shown in figure \ref{lst:dicts}.
 While a \lstinline!Map! would normally be the go-to data structure for
 describing dictionaries, \lstinline!mkDict! only iterates over its argument
@@ -1366,6 +1357,46 @@ and throw the previously mentioned exception immediately on conversion failure
 rather than taking a detour via error values,
 should this trust prove to be misplaced.
 
+\subsection{Generalising to other languages}
+\label{sec:generalising}
+The implementation so far has been quite clearly focused on the needs of
+web-targeting Haskell dialects. However, the interface and library described
+should be portable across other host languages with relative ease, provided
+that they have the following properties:
+
+\emph{Dynamically typed}. The reliance on the
+\lstinline!HostAny! type to represent host language values makes support for
+statically typed host languages very cumbersome, at best.
+
+\emph{Garbage collected}. Our interface completely ignores something which
+very much concerns traditional foreign function interfaces: ownership and
+eventual deallocation of memory. This careless behavior is enabled by the
+fact that the host language is assumed to be garbage collected. Removing
+garbage collection from the equation would land us in a position much
+more similar to the vanilla FFI, albeit with less restrictions on
+marshallable types.
+
+\emph{Dynamic code evaluation}. The ability to import foreign code without
+compiler modification relies crucially on the ability of the host language
+to execute arbitrary strings of code. While this restriction can be lifted
+with a compiler modification as described in \ref{sec:inline-eval}, this
+diminishes the utility of the interface, limiting the portability and
+ease of implementation that are some of its greatest strengths.
+
+\emph{Higher order-ness}. Dynamic code evaluation is not much use if we can't
+evaluate a piece of code and get a function object back -- there is nothing
+for our Haskell program to call! While it is certainly conceivable to
+re-evaluate strings of host language code anew on each function application,
+with arguments spliced into the evaluated program, this strikes us as an
+approach which is both brittle and slow, leading us to conclude that our
+interface would fare quite badly in a first order language.
+
+Languages that fulfill these criteria and might make attractive targets
+for porting include Python, PHP and Ruby. While our interface should be
+portable to any such language, we have yet to implement our interface
+for any non-JavaScript environment.
+
+
 \subsection{Limitation to garbage collected host languages}
 \label{sec:host-gc}
 The observant reader may notice that up until this point, we have completely
@@ -1596,6 +1627,12 @@ an implementor also need to supply a parser for the quoted language.
 While our interface is designed for web-targeting Haskell dialects, extending
 its applicability is generally a venue worthy of further exploration.
 
+As described in section \ref{sec:generalising} our interface has yet to be
+implemented for host languages other than JavaScript. Demonstrating that
+it is practically portable to at least one other host language would give
+additional weight to our claims of portability and improve the general
+applicability of the interface.
+
 By combining two optimizations given in section \ref{sec:optimizations},
 the restriction of our \lstinline!safe_host! function to only accept statically
 known strings and the elimination of calls to \lstinline!eval! for statically
@@ -1607,18 +1644,12 @@ functions, it follows that we are able to eliminate all \lstinline!eval! calls.
 While the actual implementation of this idea has yet to be worked out,
 guaranteeing the complete absence of \lstinline!eval! from the generated host
 code would remove the restriction that our host language supports dynamic code
-evaluation at runtime, notably making our interface implementable on
-recent versions of the Java Virtual Machine.
-Implementing this interface for the Java Virtual Machine, with the
+evaluation at runtime, nearly making our interface implementable on
+recent versions of the Java Virtual Machine if not for the dynamic typing
+requirement. Investigating ways around this restriction and an implementation
+of our interface for the Java Virtual Machine, with the
 prerequisite Haskell-to-JVM compiler, would lend additional applicability to
 our interface.
-
-Out interface does not currently catch and marshal host language
-exceptions, but requires foreign language code to take care of any exceptions.
-While the actual implementation is quite specific to a particular
-host environment, automatically converting exceptions would be a useful feature
-even so. Investigating the degree to which this feature could be implemented
-in a host platform agnostic manner would be a possible extension of this work.
 
 Due to the hard requirement that our host language be garbage collected,
 our interface is not currently applicable in a C context. This is unfortunate,
