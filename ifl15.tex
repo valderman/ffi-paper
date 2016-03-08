@@ -233,7 +233,7 @@ Contrasting this with the standard FFI code from figure \ref{lst:bad-ffi}:
   available to us, without having to resort to external stubs.
 \end{itemize}
 
-To be clear, the idea of a higher level foreign function interface is by no
+To be clear, the idea of a higher-level foreign function interface is by no
 means novel in itself;
 there already exists a large body of work in this problem domain, solving many
 of the problems of figure \ref{lst:bad-ffi},
@@ -361,7 +361,7 @@ language code:
 At first glance, it might seem strange to separate \lstinline!ToAny!
 and \lstinline!FromAny! instead of merging them into a single
 \lstinline!Marshal! class. The reason for this is that merging the two classes
-breaks marshalling of pure higher order functions in a rather subtle way, as
+breaks marshalling of pure higher-order functions in a rather subtle way, as
 discussed in section \ref{sec:extensions}.
 
 We let the classic ``hello, world'' example illustrate the import of simple
@@ -1070,7 +1070,7 @@ figure \ref{lst:good-ffi}.
 \label{sec:marshalling-exceptions}
 Trapping errors in foreign C code is relatively straightforward, albeit
 cumbersome, owing to the relative absence of structured error handling in C.
-However, when interacting with a higher level language, one must take into
+However, when interacting with a higher-level language, one must take into
 account the risk of exceptions being raised in any imported foreign code.
 In the basic Haste.Foreign interface, such exceptions must be manually handled
 lest they terminate the enclosing Haskell program much like a segmentation
@@ -1176,7 +1176,7 @@ To this end, several microbenchmarks were devised:
 These functions were then applied 500 000 times in two different contexts: one
 tight, strict, tail recursive loop, intended to produce as efficient code
 as possible; and one which simply consists of running \lstinline!mapM_! over
-a list containing 500 000 elements, to obtain higher level code which is harder to
+a list containing 500 000 elements, to obtain higher-level code which is harder to
 optimize and analyse for strictness.
 
 The resulting programs, compiled with version 0.5.4.2 of the Haste compiler
@@ -1494,7 +1494,7 @@ functions in particular are cumbersome to push between Haskell and JavaScript.
 
 \paragraph{UHC: the traditional FFI, on steroids for JavaScript}
 The UHC Haskell compiler comes with a JavaScript backend as well, and matching
-higher level extensions to its foreign function interface\ \cite{uhc}.
+higher-level extensions to its foreign function interface\ \cite{uhc}.
 Like Fay, UHC provides automatic conversion of Haskell values to JavaScript
 objects, as well as importing arbitrary JavaScript expressions, with some
 parsing and wildcard expansion.
@@ -1515,7 +1515,7 @@ Instead of using a special ``foreign import'' syntactic form, Clean allows
 developers to write \emph{system} implementation modules: modules where the
 implementations of functions defined in a definition module may be written in
 a language other than Clean\ \cite{clean}. However, only primitive types may
-be passed to this foreign code and no guarantees, making higher level
+be passed to this foreign code and no guarantees, making higher-level
 interoperability cumbersome.
 Clean's FFI is thus more flexible than the foreign function interface of GHC,
 allowing host and client language code to be mixed, but less so than the other
