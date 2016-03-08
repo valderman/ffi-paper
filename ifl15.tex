@@ -392,9 +392,9 @@ equivalents.
 
 In the rest of section \ref{sec:interface}, we give an implementation of the
 basic Haskell '98 interface for the Haste compiler.
-We then extend it with features requiring some extensions to Haskell '98 --
-most notably generics and default signatures -- in section
-\ref{sec:extensions}, to arrive at the complete interface presented here.
+We then extend it with features requiring some extensions to Haskell '98
+in section \ref{sec:extensions}, to arrive at the complete interface
+presented here.
 
 \subsection{Implementing marshalling}\label{sec:marshalling}
 As usual in the functional world, we ought to start with the \emph{base case}:
@@ -435,7 +435,7 @@ no need to look any further than the vanilla foreign function interface.
 We must also provide some way of combining values into more complex values,
 to be able to represent lists, record types and other conveniences we take for
 granted in our day to day development work.
-But how should these values be marshalled?
+But how should these values be combined?
 
 JavaScript, supports two basic types, which are
 sufficient to represent values of any non-arrow type: arrays and dictionaries.
@@ -563,10 +563,11 @@ of our marshalling function and the evaluation of the resulting thunk.
 Implementing the \lstinline!host! function -- the function by which JavaScript
 functions are imported into Haskell -- turns out to be slightly trickier
 than marshalling data between environments.
-The types of our imported functions need to differ depending on the arity of
-the imported host language code. This necessitates \lstinline!host! returning
-some variadic function. Fortunately, there is a well known trick to accomplish
-this, described in\ \cite{printf}, which uses an inductive class instance to
+We want to be able to use a single function to import any JavaScript function,
+using the declared Haskell type of the imported function to determine its
+arity, argument types and return type.
+There is a well known way to accomplish this, colloquially known as
+``the printf trick''\ \cite{printf}, which uses an inductive class instance to
 successively build up a list of arguments over repeated function applications,
 and a base case instance to perform some computation over said arguments after
 the function in question has been fully applied.
@@ -579,44 +580,40 @@ This suggests the following class definition.
 type HostFun = HostAny
 class Import f where
   import_ :: HostFun -> [HostAny] -> f
-\end{code}
 
-For our purposes, the base case is a nullary computation in the IO monad.
-The list of arguments is converted from a list to
-a host language array in order to squeeze it through the vanilla foreign
-function interface, and the value we get back is marshalled back into a proper
-Haskell value:
-
-\begin{code}
 foreign import stdcall
   apply :: HostFun -> HostAny -> IO HostAny
 
 instance FromAny a => Import (IO a) where
   import_ f args =
-    apply f (toAny args) >>= fromAny
-\end{code}
+    apply f (toAny (reverse args)) >>= fromAny
 
-Note the use of a foreign import in our base case. As the application of a
-foreign function to a foreign list of foreign arguments is clearly, well, a
-\emph{foreign} matter, we must call out to the host language for this final
-step.
-This function is specific to the host language in use. A possible
-implementation of \lstinline!apply! for a JavaScript host environment may look
-as follows:
-
-\begin{code}
-(f, args) => f.apply(null, args)
-\end{code}
-
-The inductive case is not much more complex: we only need to marshal a single
-argument and recurse.
-
-\begin{code}
 instance (ToAny a, Import b) =>
          Import (a -> b) where
   import_ f args =
     \arg -> import_ f (toAny arg : args)
 \end{code}
+
+When applied to some \lstinline!HostFun! and a list of arguments collected so
+far, \lstinline!import_! returns a variadic function $f$, whose arity is decided
+by how many arguments it is applied to or by explicit type annotation.
+When $f$ is applied to an argument, said argument is marshalled into a
+\lstinline!HostAny! value and added to the list of arguments.
+When $f$ is fully applied and we reach the base case -- a nullary computation
+in the \lstinline!IO! monad -- the \lstinline!HostFun! provided to
+\lstinline!import_! is shipped off to JavaScript via the vanilla FFI to be
+applied to the list of arguments built up during the recursion.
+The \lstinline!apply! function which performs the actual application is very
+simple:
+
+\begin{code}
+function(f, args) {
+  return f.apply(null, args);
+}
+\end{code}
+
+After \lstinline!apply! returns, its return value is marshalled back into
+Haskell and returned to the caller of $f$.
 
 With this, we have all the building blocks required to implement the
 \lstinline!host! function. With all the hard work already done, the
@@ -638,7 +635,11 @@ host s = import_ f []
 The foreign \lstinline!eval! import brings in the host language's evaluation
 construct. Recall that one requirement of our method is the existence of such
 a construct, to convert arbitrary strings of host language code into functions
-or other objects.
+or other objects. \lstinline!eval! is then used to create a function object --
+represented as a \lstinline!HostFun! -- which is used to create the
+aforementioned Haskell function $f$.
+This is all we need to be able to import first order JavaScript functions
+such as the motivating example in figure \ref{lst:good-ffi}
 
 \section{Optimizing for safety and performance}
 \label{sec:optimizations}
@@ -789,16 +790,15 @@ However, it also has the \emph{dis}advantage of requiring modifications to the
 compiler in use, however slight, which increases the interface's overall
 complexity of implementation.
 
-\section{Putting our interface to use}
+\section{Extending our interface}
 \label{sec:extensions}
 While the interface described in sections \ref{sec:interface} and
 \ref{sec:optimizations} represents a clear raising of the abstraction layer
 over the vanilla foreign function interface, it is still lacking some
-desirable high level functionality: marshalling of arbitrary functions and
-generic data types.
-
-In this section we demonstrate the flexibility of our interface by implementing
-this functionality on top of it.
+desirable high level functionality: marshalling of higher order functions,
+exception handling and generic marshalling.
+In this section we demonstrate the flexibility of our interface by showing
+how this functionality can be implemented on top of it.
 
 \subsection{Dynamic function marshalling}
 \label{sec:marshalling-functions}
@@ -889,7 +889,7 @@ implement \lstinline!Import! is not flexible
 enough to tackle this problem. Instead, we bring in yet another language
 extension, closed type families\ \cite{closedtypefamilies}, to lend us the type
 level flexibility we need. We begin by defining the \lstinline!Exportable!
-type class first encountered in the type signature of \lstinline!hsfun_to_host!,
+type class which denotes all functions that can be exported into JavaScript,
 and a closed type family describing the type level behavior of our function
 marshalling.\\
 \begin{code}
@@ -1370,7 +1370,7 @@ with a compiler modification as described in \ref{sec:inline-eval}, this
 diminishes the utility of the interface, limiting the portability and
 ease of implementation that are some of its greatest strengths.
 
-\emph{Higher order-ness}. Dynamic code evaluation is not much use if we can't
+\emph{Higher order}. Dynamic code evaluation is not much use if we can't
 evaluate a piece of code and get a function object back -- there is nothing
 for our Haskell program to call! While it is certainly conceivable to
 re-evaluate strings of host language code anew on each function application,
