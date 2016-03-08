@@ -132,9 +132,9 @@ getCTimeval = with (MkCTimeval 0 0) $ \ptval -> do
 
 This code snippet is more akin to thinly veiled C code than idiomatic, readable
 Haskell; an unfortunate reality of working with the standard foreign function
-interface. When using compilers such as Haste\ \cite{haste} and
-GHCJS\ \cite{ghcjs} -- Haskell compilers which target the web browser -- the
-situation is even worse.
+interface. When using compilers such as the Haste\ \cite{haste} and
+GHCJS\ \cite{ghcjs} -- GHC-based Haskell compilers which target the web
+browser -- the situation is even worse.
 The modern web browser environment is highly reliant on callback functions and
 complex data types, none of which are trivial to pass through the FFI;
 the user has a wealth of high-level JavaScript libraries within arm's reach,
@@ -461,15 +461,19 @@ providing functionality to build as well as inspect dictionaries.
 We will need three basic host language operations: creating a new dictionary,
 associating a dictionary key with a particular value, and looking up values
 from dictionary keys. From these we construct two functions to marshal sum and
-product types to and from dictionaries: \lstinline!mkDict!
-and \lstinline!getMember!, as shown in figure \ref{lst:dicts}.
+product types to and from dictionaries: \lstinline!mkDict! which creates
+dictionaries from association lists,
+and \lstinline!getMember!, which looks up dictionary values by key.
 While a \lstinline!Map! would normally be the go-to data structure for
 describing dictionaries, \lstinline!mkDict! only iterates over its argument
 in order to add the corresponding entries to the created JavaScript dictionary,
 making simple association lists a less heavyweight choice than a
 \lstinline!Map!.
 
-Note also the use of the generally unsafe \lstinline!unsafePerformIO!
+The complete implementation of marshalling for lists and dictionaries is
+shown in figure \ref{lst:dicts}.
+
+Note the use of the generally unsafe \lstinline!unsafePerformIO!
 in \lstinline!mkDict! and in the \lstinline!ToAny! instance for lists.
 The only side effects performed by said functions are to create a new
 references, mutate them, and then return them, never to mutate them again.
@@ -1125,6 +1129,11 @@ can then be caught anywhere a ``normal'' Haskell exception could be caught.
 A complete implementation of this extension is given in
 figure \ref{lst:catchJS}.
 
+An interesting side-effect of this approach to exception handling and the fact
+that JavaScript syntax errors are catchable exceptions is that the
+exception-safe \lstinline!host! function is not only catch dynamic errors,
+but incorrectly written foreign imports as well.
+
 \begin{listingfloat}
 \begin{code}
 catchJS :: (ToAny a, FromAny a)
@@ -1157,6 +1166,11 @@ very_safe_host = safely safe_host
 It should be noted that this approach incurs a performance penalty due to the
 extra function call and marshalling required to dispatch a function, as further
 discussed in section \ref{sec:performance}.
+
+An interesting side-effect of this approach to exception handling and the fact
+that JavaScript syntax errors are catchable exceptions is that the
+exception-safe \lstinline!host! function is not only catch dynamic errors,
+but incorrectly written foreign imports as well.
 
 
 \section{Performance}
@@ -1316,10 +1330,10 @@ severity slightly alleviated, in sections \ref{sec:interface} and
 \ref{sec:inline-eval}, there are still several design choices and lingering
 limitations that may need further justification.
 
-\subsection{fromAny type level expressiveness}
+\subsection{fromAny and error handling}
 The \lstinline!fromAny! function used to implement marshalling in section
 \ref{sec:interface} is by definition not total. As its purpose is to
-convert values of god-knows-what host language type into properly typed Haskell
+convert dynamically typed JavaScript values into statically typed Haskell
 values, from the simplest atomic values to the most complex data structures,
 the possibility for failure is apparent. Why, then, does its type not admit
 the possibility of failure, for instance by wrapping the converted value in a
@@ -1333,12 +1347,15 @@ for this error value to ever reach the user. The only sensible action for the
 foreign call to take when encountering an error value would be to throw an
 exception, informing the user ``out of band'' rather than by somehow threading
 an error value to the entire call.
-
 It is then simpler, as well as reducing the amount of error checking overhead
 necessary, to trust that the foreign code in question is usually well behaved
 and throw the previously mentioned exception immediately on conversion failure
 rather than taking a detour via error values,
 should this trust prove to be misplaced.
+
+It should also be noted that the basic interface does neither handles syntax
+errors nor exceptions thrown from foreign code: it is the responsibility of
+the user 
 
 \subsection{Generalising to other languages}
 \label{sec:generalising}
