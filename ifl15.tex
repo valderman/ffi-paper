@@ -1213,11 +1213,6 @@ the average run times of their FFI counterparts.
 The benchmarks were executed on a Lenovo ThinkPad X230 laptop running Debian GNU/Linux,
 equipped with an Intel i5 3210M CPU and 8 GB of RAM.
 
-While this may not be the most rigorous of performance evaluations,
-the results are repeatable, and the methodology is enough for our purposes:
-getting a rough picture of how much speed we are giving up for a more
-convenient interface.
-
 The results for each benchmark are given in table \ref{tbl:performance} as
 the ratio of the run time for our library over the run time for the vanilla
 FFI.
@@ -1467,28 +1462,6 @@ Better, then, to let the user import their foreign code in the IO monad and
 explicitly vouch for its purity, using \lstinline!unsafePerformIO! to bring it
 into the world of pure functions.
 
-\subsection{Continuation-based blocking in non-concurrent environments}
-A particularly neat feature of the foreign function interface employed by the
-GHCJS compiler is the ability for foreign host code to suspend execution while
-waiting for an event to occur, even though its JavaScript host environment is
-devoid of any concurrency support\ \cite{ghcjs}.
-This is accomplished by giving imported functions an extra parameter:
-a continuation to be called upon completion
-of the foreign operation to resume execution of the Haskell program, instead
-of simply returning like a ``normal'' JavaScript function would.
-
-This functionality is not supported out of the box. GHCJS accomplishes this
-by outputting continuation passing code which is executed by a clever
-trampolining machinery. Supporting this feature would tie the interface to
-a particular code generation strategy as well as add considerable complexity;
-a price we deem too high to pay for this feature.
-
-Instead, this functionality can be implemented on top of our interface without
-much difficulty using a construct dubbed the ``poor man's concurrency
-monad''\ \cite{poormansconcurrencymonad}; a monad implementing coarse grained
-preemptive multitasking with blocking synchronization variables in
-non-concurrent environments.
-
 \subsection{Related work}\label{sec:related}
 Aside from the vanilla foreign function interface used as the basis of our
 interface, there are several different, more modern, takes on interfacing
@@ -1707,10 +1680,6 @@ This work has been partially funded by the Swedish Foundation for Strategic Rese
   Chakravarty, M. M., Keller, G., \& Peyton Jones, S. (2005, September).
   Associated type synonyms.
   In ACM SIGPLAN Notices (Vol. 40, No. 9, pp. 241-253). ACM.
-\bibitem[Claessen (1999)]{poormansconcurrencymonad}
-  Claessen, K. (1999).
-  A poor man's concurrency monad.
-  Journal of Functional Programming, 9(03), 313-323.
 \bibitem[Dijkstra, Stutterheim, Vermeulen, Swierstra (2013)]{uhc}
   Dijkstra, A., Stutterheim, J., Vermeulen, A., \& Swierstra, S. D. (2013).
   Building JavaScript applications with Haskell.
