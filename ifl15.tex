@@ -185,6 +185,11 @@ to have the following properties:
   code from different libraries in a single import,
   as well as transform data which may be inefficient or cumbersome to import
   into Haskell as-is.
+
+  To be clear, this capability is not intended to subsume writing proper,
+  external JavaScript, but to give a means of reducing the impedance mismatch
+  between Haskell and JavaScript without forcing the user to create stub after
+  stub after stub.
 \item
   Finally, the FFI should be easy to implement and understand, ideally being
   implementable without compiler modifications, portable across Haskell
