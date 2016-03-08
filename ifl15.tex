@@ -315,25 +315,27 @@ imported from the host language into our Haskell program if and only if:
 \begin{code}
 type HostAny
 
-class Marshal a where
+class ToAny a where
   toAny :: a -> HostAny
   default toAny :: (GToAny (Rep a), Generic a)
                 => a -> HostAny
 
+class FromAny a where
   fromAny :: HostAny -> IO a
   default fromAny :: (GFromAny (Rep a), Generic a)
                   => HostAny -> IO a
 
 class Import f
-instance (Marshal a, Import b) => Import (a -> b)
-instance Marshal a             => Import (IO a)
+instance (ToAny a, Import b) => Import (a -> b)
+instance FromAny a           => Import (IO a)
 
 -- Instances for functions and basic types
-instance Marshal Int
+instance ToAny Int
+instance FromAny Int
 ...
 instance Import f => FromAny f
-instance (Marshal a, Exportable b) => Marshal (a -> b)
-instance Marshal a => Marshal (IO a)
+instance (FromAny a, Exportable b) => Marshal (a -> b)
+instance ToAny a => ToAny (IO a)
 
 host :: Import f => String -> f
 \end{code}
@@ -374,7 +376,7 @@ a certain function before the next repaint of the screen occurs:
 \begin{code}
 type Time = Double
 newtype FrameHandle = FrameHandle HostAny
-  deriving Marshal
+  deriving FromAny
 
 requestFrame :: (Time -> IO ()) -> IO FrameHandle
 requestFrame = host "window.requestAnimationFrame"
@@ -406,9 +408,8 @@ function interface.
 foreign import stdcall intToAny :: Int -> HostAny
 foreign import stdcall anyToInt :: HostAny -> IO Int
 
-instance Marshal Int where
-  toAny = intToAny
-  fromAny = anyToInt
+instance ToAny   Int where toAny   = intToAny
+instance FromAny Int where fromAny = anyToInt
 \end{code}
 
 We might also find a \lstinline!HostAny! instance for \lstinline!ToAny!
@@ -416,9 +417,8 @@ and \lstinline!FromAny! handy. Of course, \lstinline!HostAny! already being
 in its host language representation form, the instances are trivial.
 
 \begin{code}
-instance Marshal HostAny where
-  toAny = id
-  fromAny = return
+instance ToAny   HostAny where toAny   = id
+instance FromAny HostAny where fromAny = return
 \end{code}
 
 However, if passing simple values was all we wanted to do, then there would be
@@ -479,18 +479,13 @@ foreign import stdcall
 foreign import stdcall
   get :: HostAny -> HostString -> IO HostAny
 
-foreign import stdcall
-  newArray :: IO HostAny
-foreign import stdcall
-  push :: HostAny -> HostAny -> IO ()
-
 mkDict :: [(String, HostAny)] -> HostAny
 mkDict xs = unsafePerformIO $ do
   d <- newDict
   mapM_ (\(k, v) -> set d (toHostString k) v) xs
   return d
 
-getMember :: Marshal a => HostAny -> String -> IO a
+getMember :: FromAny a => HostAny -> String -> IO a
 getMember dict key =
   get dict (toHostString key) >>= fromAny
 \end{code}
@@ -505,22 +500,25 @@ dictionary operations.
 
 \begin{listingfloat}
 \begin{code}
-instance (Marshal a, Marshal b) =>
-         Marshal (Either a b) where
-    toAny (Left a)  = mkDict [("tag",  toHostString "left"),
-                              ("data", toAny a)]
-    toAny (Right b) = mkDict [("tag",  toHostString "right"),
-                              ("data", toAny b)]
+instance (ToAny a, ToAny b) =>
+         ToAny (Either a b) where
+  toAny (Left a)  = mkDict [("tag",  toHostString "left"),
+                            ("data", toAny a)]
+  toAny (Right b) = mkDict [("tag",  toHostString "right"),
+                            ("data", toAny b)]
 
-    fromAny x = do
-      tag <- fromHostString <$> getMember x "tag"
-      case tag of
-        "left"  -> Left  <$> getMember x "data"
-        "right" -> Right <$> getMember x "data"
+instance (FromAny a, FromAny b) =>
+         FromAny (Either a b) where
+  fromAny x = do
+    tag <- fromHostString <$> getMember x "tag"
+    case tag of
+      "left"  -> Left  <$> getMember x "data"
+      "right" -> Right <$> getMember x "data"
 
-instance (Marshal a, Marshal b) => Marshal (a, b) where
+instance (ToAny a, ToAny b) => ToAny (a, b) where
   toAny (a, b) = toAny [toAny a, toAny b]
 
+instance (FromAny a, FromAny b) => FromAny (a, b) where
   fromAny x = do
     [a, b] <- fromAny x
     (,) <$> fromAny a <*> fromAny b
@@ -568,7 +566,7 @@ Haskell value:
 foreign import stdcall
   apply :: HostFun -> HostAny -> IO HostAny
 
-instance Marshal a => Import (IO a) where
+instance FromAny a => Import (IO a) where
   import_ f args =
     apply f (toAny args) >>= fromAny
 \end{code}
@@ -589,7 +587,7 @@ The inductive case is not much more complex: we only need to marshal a single
 argument and recurse.
 
 \begin{code}
-instance (Marshal a, Import b) =>
+instance (ToAny a, Import b) =>
          Import (a -> b) where
   import_ f args =
     \arg -> import_ f (toAny arg : args)
@@ -656,30 +654,30 @@ the one given in section \ref{sec:interface}.
 
 \begin{listingfloat}
 \begin{code}
-  {-# NOINLINE [0] host' #-}
-  host' :: FromAny a => HostFun -> [HostAny] -> IO a
-  host' f args = apply f (toAny args) >>= fromAny
+{-# NOINLINE [0] dispatch #-}
+dispatch :: FromAny a => HostFun -> [HostAny] -> IO a
+dispatch f args = apply f (toAny args) >>= fromAny
 
-  instance FromAny a => Import (IO a) where
-    host = host'
-  
-  foreign import stdcall apply0 ::
-    HostFun -> IO HostAny
-  foreign import stdcall apply1 ::
-    HostFun -> HostAny -> IO HostAny
-  foreign import stdcall apply2 ::
-    HostFun -> HostAny -> HostAny -> IO HostAny
-  ...
-  
-  {-# RULES
-    "apply0" [1] forall f. host' f [] =
-                 apply0 f >>= fromAny
-    "apply1" [1] forall f a. host' f [a] =
-                 apply1 f a >>= fromAny
-    "apply2" [1] forall f a b. host' f [b,a] =
-                 apply2 f a b >>= fromAny
-    ...
-   #- }
+instance FromAny a => Import (IO a) where
+  import_ = dispatch
+
+foreign import stdcall apply0 ::
+  HostFun -> IO HostAny
+foreign import stdcall apply1 ::
+  HostFun -> HostAny -> IO HostAny
+foreign import stdcall apply2 ::
+  HostFun -> HostAny -> HostAny -> IO HostAny
+...
+
+{-# RULES
+"apply0" [1] forall f. dispatch f [] =
+               apply0 f >>= fromAny
+"apply1" [1] forall f a. dispatch f [a] =
+               apply1 f a >>= fromAny
+"apply2" [1] forall f a b. dispatch f [b,a] =
+               apply2 f a b >>= fromAny
+...
+ #-}
 \end{code}
 \caption{Specializing the \lstinline!host! base case}
 \label{lst:specialization}
@@ -714,12 +712,12 @@ this extension and the basic \lstinline!host! function described in section
 \ref{sec:interface}, at the cost of slightly more inconvenient import syntax:
 
 \begin{code}
-  safe_host :: Import f => StaticPtr String -> f
-  safe_host = host . deRefStaticPtr
+safe_host :: Import f => StaticPtr String -> f
+safe_host = host . deRefStaticPtr
 
-  safe_hello :: IO ()
-  safe_hello = safe_host
-    static "() => alert('Hello, world!')"
+safe_hello :: IO ()
+safe_hello = safe_host $
+  static "() => alert('Hello, world!')"
 \end{code}
 
 \subsection{Eliminating \lstinline!eval!}
@@ -795,8 +793,8 @@ allowing host language functions to return functions of any type admissible
 as an import type by way of the \lstinline!host! function.
 
 \begin{code}
-  instance Import a => FromAny a where
-    fromAny f = return (import_ f [])
+instance Import a => FromAny a where
+  fromAny f = return (import_ f [])
 \end{code}
 
 \paragraph{Passing functions to foreign code}
@@ -819,8 +817,8 @@ IO monad into a host language function which, when applied to $n$ host
 language arguments, calls $f$ with those same arguments and returns the $r$
 returned by $f$.\\
 \begin{code}
-  foreign import stdcall hsfun_to_host
-    :: (HostAny -> ... -> HostAny) -> HostFun
+foreign import stdcall hsfun_to_host
+  :: (HostAny -> ... -> HostAny) -> HostFun
 \end{code}\\
 But how can we make this operation type check?
 As we are bound to the types the vanilla foreign function interface lets us
@@ -836,15 +834,15 @@ Haskell compiler in use, this use of stable pointers may introduce a space
 leak. This is discussed further in section \ref{sec:host-gc}, and an
 alternative solution is presented.\\
 \begin{code}
-  import Foreign.StablePtr
-  import System.IO.Unsafe
+import Foreign.StablePtr
+import System.IO.Unsafe
 
-  foreign import stdcall
-    hsfun_to_host' :: StablePtr a -> HostFun
+foreign import stdcall
+  _hsfun_to_host :: StablePtr a -> HostFun
 
-  hsfun_to_host :: Exportable f => f -> IO HostFun
-  hsfun_to_host f =
-    hsfun_to_host' `fmap` newStablePtr (mkHostFun f)
+hsfun_to_host :: Exportable f => f -> IO HostFun
+hsfun_to_host f =
+  _hsfun_to_host `fmap` newStablePtr (mkHostFun f)
 \end{code}\\
 Just being able to pass Haskell functions verbatim to the host language is not
 enough. The functions will expect Haskell values as their arguments and return
@@ -870,12 +868,12 @@ type class first encountered in the type signature of \lstinline!hsfun_to_host!,
 and a closed type family describing the type level behavior of our function
 marshalling.\\
 \begin{code}
-  type family Host a where
-    Host (a -> b) = HostAny -> Host b
-    Host (IO a)   = IO HostAny
+type family Host a where
+  Host (a -> b) = HostAny -> Host b
+  Host (IO a)   = IO HostAny
 
-  class Exportable f where
-    mkHostFun :: f -> Host f
+class Exportable f where
+  mkHostFun :: f -> Host f
 \end{code}\\
 This is relatively straightforward. Inspecting the \lstinline!Host! type
 family, we see that applying \lstinline!mkHostFun! to any eligible function
@@ -888,17 +886,17 @@ making the types match up, and concocting a \lstinline!ToAny! instance is only
 a matter of composing our building blocks together.
 
 \begin{code}
-  instance ToAny a => Exportable (IO a) where
-    mkHostFun = fmap toAny
+instance ToAny a => Exportable (IO a) where
+  mkHostFun = fmap toAny
 
-  instance (FromAny a, Exportable b) =>
-            Exportable (a -> b) where
-    mkHostFun f =
-      mkHostFun . f . unsafePerformIO . fromAny
+instance (FromAny a, Exportable b) =>
+          Exportable (a -> b) where
+  mkHostFun f =
+    mkHostFun . f . unsafePerformIO . fromAny
   
-  instance Exportable f => ToAny f where
-    {-# NOINLINE toAny #-}
-    toAny = unsafePerformIO . hsfun_to_host
+instance Exportable f => ToAny f where
+  {-# NOINLINE toAny #-}
+  toAny = unsafePerformIO . hsfun_to_host
 \end{code}
 
 The one interesting instance here is that of the inductive case, where we use
@@ -981,33 +979,34 @@ to make pure functions an instance of \lstinline!Exportable!.
 
 \begin{listingfloat}
 \begin{code}
-  import Foreign.StablePtr
-  import System.IO.Unsafe
+import Foreign.StablePtr
+import System.IO.Unsafe
 
-  foreign import stdcall
-    hsfun_to_host' :: StablePtr a -> HostFun
+foreign import stdcall
+  _hsfun_to_host :: StablePtr a -> HostFun
 
-  hsfun_to_host :: Exportable f => f -> IO HostFun
-  hsfun_to_host f =
-    hsfun_to_host' `fmap` newStablePtr (mkHostFun f)
+hsfun_to_host :: Exportable f => f -> IO HostFun
+hsfun_to_host f =
+  _hsfun_to_host `fmap` newStablePtr (mkHostFun f)
 
-  type family Host a where
-    Host (a -> b) = HostAny -> Host b
-    Host (IO a)   = IO HostAny
-    Host a        = HostAny
+type family Host a where
+  Host (a -> b) = HostAny -> Host b
+  Host (IO a)   = IO HostAny
+  Host a        = HostAny
 
-  instance (ToAny a, Host a ~ HostAny) =>
-            Exportable a where
-    mkHostFun = toAny
+class Exportable f where
+  mkHostFun :: f -> Host f
 
-  instance (FromAny a, Exportable b) =>
-            ToAny (a -> b) where
-    {-# NOINLINE toAny #-}
-    toAny = unsafePerformIO . hsfun_to_host
+instance (ToAny a, Host a ~ HostAny) =>
+          Exportable a where
+  mkHostFun = toAny
 
-  instance ToAny a => ToAny (IO a) where
-    {-# NOINLINE toAny #-}
-    toAny = unsafePerformIO . hsfun_to_host
+instance (FromAny a, Exportable b) =>
+          ToAny (a -> b) where
+  toAny = unsafePerformIO . hsfun_to_host
+
+instance ToAny a => ToAny (IO a) where
+  toAny = unsafePerformIO . hsfun_to_host
 \end{code}
 \caption{Dynamic function exports implemented on top of our interface}
 \label{lst:export-final}
@@ -1034,9 +1033,9 @@ mere matter of passing a function to the host language, which then
 arranges for the function to be available in a known, appropriate location.
 
 \begin{code}
-  export :: Exportable f => String -> f -> IO ()
-  export =
-    host "(name, f) => window['haskell'][name] = f;"
+export :: ToAny f => String -> f -> IO ()
+export =
+  host "(name, f) => window['haskell'][name] = f;"
 \end{code}
 
 \subsection{Generic marshalling}
@@ -1095,28 +1094,28 @@ figure \ref{lst:catchJS}.
 
 \begin{listingfloat}
 \begin{code}
-  catchJS :: (ToAny a, FromAny a)
-          => (String -> IO ())
-          -> IO a -> IO a
-  catchJS = "(handle, act) =>\\
-    \\{ try        { return act(); }\\
-    \\  catch (ex) { handle(ex.toString()); }}"
+catchJS :: (ToAny a, FromAny a)
+        => (String -> IO ())
+        -> IO a -> IO a
+catchJS = "(handle, act) =>\\
+  \\{ try        { return act(); }\\
+  \\  catch (ex) { handle(ex.toString()); }}"
 
-  data HostException = HostException String
-    deriving Show
-  instance Exception HostException
+data HostException = HostException String
+  deriving Show
+instance Exception HostException
   
-  class Safely a where
-    safely :: a -> a
+class Safely a where
+  safely :: a -> a
 
-  instance Safely b => Safely (a -> b) where
-    safely f x = safely (f x)
+instance Safely b => Safely (a -> b) where
+  safely f x = safely (f x)
 
-  instance (FromAny a, ToAny a) => Safely (IO a) where
-    safely m = catchJS (throwIO . HostException)
+instance (FromAny a, ToAny a) => Safely (IO a) where
+  safely m = catchJS (throwIO . HostException)
 
-  very_safe_host :: Import a => StaticPtr String -> a
-  very_safe_host = safely safe_host
+very_safe_host :: Import a => StaticPtr String -> a
+very_safe_host = safely safe_host
 \end{code}
 \caption{Marshalling JavaScript exceptions}
 \label{lst:catchJS}
