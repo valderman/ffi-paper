@@ -118,7 +118,7 @@ instance Storable CTimeval where
 		pokeElemOff (castPtr p) 0 s
 		pokeElemOff (castPtr p) 1 mus
 
-foreign import ccall unsafe "time.h gettimeofday"
+foreign import stdcall unsafe "time.h gettimeofday"
    gettimeofday :: Ptr CTimeval -> Ptr () -> IO CInt
 
 getCTimeval :: IO CTimeval
@@ -198,18 +198,18 @@ having to make intrusive changes to our Haskell compiler.
 
 \begin{listingfloat}
 \begin{code}
-  data UTCTime = UTCTime {
-      secs  :: Word,
-      usecs :: Word
-    } deriving Generic
+data UTCTime = UTCTime {
+    secs  :: Word,
+    usecs :: Word
+  } deriving Generic
 
-  instance FromAny UTCTime
+instance FromAny UTCTime
 
-  getCurrentTime :: IO UTCTime
-  getCurrentTime =
-    host "() => {var ms = new Date().getTime();\
-                \return {secs:  ms/1000,\
-                \        usecs: (ms % 1000)*1000};}"
+getCurrentTime :: IO UTCTime
+getCurrentTime =
+  host "() => {var ms = new Date().getTime();\
+              \return {secs:  ms/1000,\
+              \        usecs: (ms % 1000)*1000};}"
 \end{code}
 \caption{Foreign imports using our FFI}
 \label{lst:good-ffi}
@@ -313,31 +313,29 @@ imported from the host language into our Haskell program if and only if:
 
 \begin{listingfloat}
 \begin{code}
-  type HostAny
+type HostAny
 
-  class ToAny a where
-    toAny :: a -> HostAny
-    default toAny :: (GToAny (Rep a), Generic a)
-                  => a -> HostAny
+class Marshal a where
+  toAny :: a -> HostAny
+  default toAny :: (GToAny (Rep a), Generic a)
+                => a -> HostAny
 
-  class FromAny a where
-    fromAny :: HostAny -> IO a
-    default fromAny :: (GFromAny (Rep a), Generic a)
-                    => HostAny -> IO a
+  fromAny :: HostAny -> IO a
+  default fromAny :: (GFromAny (Rep a), Generic a)
+                  => HostAny -> IO a
 
-  class Import f
-  instance (ToAny a, Import b) => Import (a -> b)
-  instance FromAny a           => Import (IO a)
+class Import f
+instance (Marshal a, Import b) => Import (a -> b)
+instance Marshal a             => Import (IO a)
 
-  -- Instances for functions and basic types
-  instance FromAny Int
-  instance ToAny Int
-  ...
-  instance Import f => FromAny f
-  instance (FromAny a, Exportable b) => ToAny (a -> b)
-  instance ToAny a => ToAny (IO a)
+-- Instances for functions and basic types
+instance Marshal Int
+...
+instance Import f => FromAny f
+instance (Marshal a, Exportable b) => Marshal (a -> b)
+instance Marshal a => Marshal (IO a)
 
-  host :: Import f => String -> f
+host :: Import f => String -> f
 \end{code}
 \caption{The programmer's view of our interface}
 \label{lst:interface}
@@ -347,14 +345,14 @@ These definitions give rise to a workflow for interacting with host
 language code:
 \begin{itemize}
 \item
-  define the appropriate \lstinline!ToAny! and \lstinline!FromAny! instances
+  define the appropriate \lstinline!Marshal! instances
   for any custom types, either automatically using the generic default instances
   as showcased by our motivating example in figure \ref{lst:good-ffi},
   or by defining them manually if a particular host language representation is
   desired; then
 \item
   import arbitrary host language symbols or expressions over
-  any set of types instantiating \lstinline!ToAny! or \lstinline!FromAny!,
+  any set of types instantiating \lstinline!Marshal!,
   using the \lstinline!host! function.
 \end{itemize}
 
@@ -363,8 +361,8 @@ host language functions using the interface described in figure
 \ref{lst:interface}:
 
 \begin{code}
-  hello :: String -> IO ()
-  hello = host "name => alert('Hello, ' + name);"
+hello :: String -> IO ()
+hello = host "name => alert('Hello, ' + name);"
 \end{code}
 
 To further illustrate how this interface can be used to effortlessly import
@@ -374,15 +372,15 @@ compiler, a mechanism whereby a user program may request the browser to call
 a certain function before the next repaint of the screen occurs:
 
 \begin{code}
-  type Time = Double
-  newtype FrameHandle = FrameHandle HostAny
-    deriving (ToAny, FromAny)
+type Time = Double
+newtype FrameHandle = FrameHandle HostAny
+  deriving Marshal
 
-  requestFrame :: (Time -> IO ()) -> IO FrameHandle
-  requestFrame = host "window.requestAnimationFrame"
+requestFrame :: (Time -> IO ()) -> IO FrameHandle
+requestFrame = host "window.requestAnimationFrame"
 
-  cancelFrame :: FrameHandle -> IO ()
-  cancelFrame = host "window.cancelAnimationFrame"
+cancelFrame :: FrameHandle -> IO ()
+cancelFrame = host "window.cancelAnimationFrame"
 \end{code}
 
 The resulting code is straightforward and simple, even though it performs
@@ -405,12 +403,12 @@ This is a simple proposition, as this is the forte of the vanilla foreign
 function interface.
 
 \begin{code}
-  foreign import ccall intToAny :: Int -> HostAny
-  foreign import ccall anyToInt :: HostAny -> IO Int
+foreign import stdcall intToAny :: Int -> HostAny
+foreign import stdcall anyToInt :: HostAny -> IO Int
 
-  instance ToAny Int where toAny = intToAny
-  instance FromAny Int where fromAny = anyToInt
-  ...
+instance Marshal Int where
+  toAny = intToAny
+  fromAny = anyToInt
 \end{code}
 
 We might also find a \lstinline!HostAny! instance for \lstinline!ToAny!
@@ -418,8 +416,9 @@ and \lstinline!FromAny! handy. Of course, \lstinline!HostAny! already being
 in its host language representation form, the instances are trivial.
 
 \begin{code}
-  instance ToAny HostAny where toAny = id
-  instance FromAny HostAny where FromAny = return
+instance Marshal HostAny where
+  toAny = id
+  fromAny = return
 \end{code}
 
 However, if passing simple values was all we wanted to do, then there would be
@@ -437,10 +436,9 @@ represent values of any type: arrays and dictionaries.
 
 For the sake of brevity, we assume that we have
 access to a pair of functions
-\lstinline!arrToList :: FromAny a => HostAny -> [a]!
-and \lstinline!listToArr :: ToAny a => [a] -> HostAny!
-which are used to implement the \lstinline!FromAny! and \lstinline!ToAny!
-instances respectively for lists;
+\lstinline!arrToList :: Marshal a => HostAny -> IO [a]!
+and \lstinline!listToArr :: Marshal a => [a] -> HostAny!
+which are used to implement the \lstinline!Marshal! instance for lists;
 they are trivial to implement either in Haskell using the vanilla foreign
 function interface to gradually build a list of \lstinline!HostAny! values,
 or on the host language side exploiting knowledge of the compiler's
@@ -448,7 +446,7 @@ data representation.
 
 For dictionaries, the conversion is not as clear-cut. Depending on the data
 we want to convert, the structure of our desired host language representation
-of two values may well be different even when their client language
+of two values may well be different even when their Haskell
 representations are quite similar, or even identical.
 Hence, we need to put the power over this decision into the hands of the user,
 providing functionality to build as well as inspect user-defined dictionaries.
@@ -458,25 +456,43 @@ associating a dictionary key with a particular value, and looking up values
 from dictionary keys. From these we construct two functions to marshal compound
 Haskell values to and from dictionaries: \lstinline!mkDict!
 and \lstinline!getMember!, as shown in figure \ref{lst:dicts}.
+While a \lstinline!Map! would normally be the go-to data structure for
+describing dictionaries, \lstinline!mkDict! only iterates over its argument
+in order to add the corresponding entries to the created JavaScript dictionary,
+making simple association lists a less heavyweight choice than a
+\lstinline!Map!.
+
+Note also the use of the generally unsafe \lstinline!unsafePerformIO!
+in \lstinline!mkDict!. The only side effects performed by
+\lstinline!mkDict! are to create a new reference, mutate it, and then
+return it, never to mutate it again. As the reference to the mutated object
+is not accessible outside \lstinline!mkDict! until after all mutation has
+taken place, these side effects are not observable and this use of
+\lstinline!unsafePerformIO! can thus be considered safe.
 
 \begin{listingfloat}
 \begin{code}
-  foreign import ccall
-    newDict :: IO HostAny
-  foreign import ccall
-    set :: HostAny -> HostString -> HostAny -> IO ()
-  foreign import ccall
-    get :: HostAny -> HostString -> IO HostAny
-  
-  mkDict :: [(String, HostAny)] -> HostAny
-  mkDict xs = unsafePerformIO $ do
-    d <- newDict
-    mapM_ (\k v -> set d (toHostString k) v) xs
-    return d
+foreign import stdcall
+  newDict :: IO HostAny
+foreign import stdcall
+  set :: HostAny -> HostString -> HostAny -> IO ()
+foreign import stdcall
+  get :: HostAny -> HostString -> IO HostAny
 
-  getMember :: FromAny a => HostAny -> String -> IO a
-  getMember dict key =
-    get dict (toHostString key) >>= fromAny
+foreign import stdcall
+  newArray :: IO HostAny
+foreign import stdcall
+  push :: HostAny -> HostAny -> IO ()
+
+mkDict :: [(String, HostAny)] -> HostAny
+mkDict xs = unsafePerformIO $ do
+  d <- newDict
+  mapM_ (\(k, v) -> set d (toHostString k) v) xs
+  return d
+
+getMember :: Marshal a => HostAny -> String -> IO a
+getMember dict key =
+  get dict (toHostString key) >>= fromAny
 \end{code}
 \caption{Dictionary manipulation}
 \label{lst:dicts}
@@ -489,29 +505,25 @@ dictionary operations.
 
 \begin{listingfloat}
 \begin{code}
-  instance (ToAny a, ToAny b) =>
-           ToAny (Either a b) where
-    toAny (Left a)  = mkDict [("tag",  toAny "left"),
+instance (Marshal a, Marshal b) =>
+         Marshal (Either a b) where
+    toAny (Left a)  = mkDict [("tag",  toHostString "left"),
                               ("data", toAny a)]
-    toAny (Right b) = mkDict [("tag",  toAny "right"),
+    toAny (Right b) = mkDict [("tag",  toHostString "right"),
                               ("data", toAny b)]
 
-  instance (FromAny a, FromAny b) =>
-           FromAny (Either a b) where
     fromAny x = do
-      tag <- getMember x "tag"
+      tag <- fromHostString <$> getMember x "tag"
       case tag of
-        "left"  -> Left  <$> getMember "data"
-        "right" -> Right <$> getMember "data"
+        "left"  -> Left  <$> getMember x "data"
+        "right" -> Right <$> getMember x "data"
 
-  instance (ToAny a, ToAny b) => ToAny (a, b) where
-    toAny (a, b) = toAny [toAny a, toAny b]
+instance (Marshal a, Marshal b) => Marshal (a, b) where
+  toAny (a, b) = toAny [toAny a, toAny b]
 
-  instance (FromAny a, FromAny b) =>
-           FromAny (a, b) where
-    fromAny x = do
-      [a, b] <- fromAny x
-      (,) <$> fromAny a <*> fromAny b
+  fromAny x = do
+    [a, b] <- fromAny x
+    (,) <$> fromAny a <*> fromAny b
 \end{code}
 \caption{Sums and products using lists and dictionaries}
 \label{lst:sumprod}
@@ -541,9 +553,9 @@ applying a foreign function to said list of arguments.
 This suggests the following class definition.
 
 \begin{code}
-  type HostFun = HostAny
-  class Import f where
-    import_ :: HostFun -> [HostAny] -> f
+type HostFun = HostAny
+class Import f where
+  import_ :: HostFun -> [HostAny] -> f
 \end{code}
 
 For our purposes, the base case is a nullary computation in the IO monad.
@@ -553,12 +565,12 @@ function interface, and the value we get back is marshalled back into a proper
 Haskell value:
 
 \begin{code}
-  foreign import ccall
-    apply :: HostFun -> HostAny -> IO HostAny
+foreign import stdcall
+  apply :: HostFun -> HostAny -> IO HostAny
 
-  instance FromAny a => Import (IO a) where
-    import_ f args =
-      apply f (toAny args) >>= fromAny
+instance Marshal a => Import (IO a) where
+  import_ f args =
+    apply f (toAny args) >>= fromAny
 \end{code}
 
 Note the use of a foreign import in our base case. As the application of a
@@ -570,17 +582,17 @@ implementation of \lstinline!apply! for a JavaScript host environment may look
 as follows:
 
 \begin{code}
-  (f, args) => f.apply(null, args)
+(f, args) => f.apply(null, args)
 \end{code}
 
 The inductive case is not much more complex: we only need to marshal a single
 argument and recurse.
 
 \begin{code}
-  instance (ToAny a, Import b) =>
-           Import (a -> b) where
-    import_ f args =
-      \arg -> import_ f (toAny arg : args)
+instance (Marshal a, Import b) =>
+         Import (a -> b) where
+  import_ f args =
+    \arg -> import_ f (toAny arg : args)
 \end{code}
 
 With this, we have all the building blocks required to implement the
@@ -591,13 +603,13 @@ be passed as an argument over the vanilla foreign function interface, and a
 function \lstinline!toHostString :: String -> HostString!.
 
 \begin{code}
-  foreign import ccall
-    eval :: HostString -> HostFun
+foreign import stdcall
+  eval :: HostString -> HostFun
 
-  host :: Import f => String -> f
-  host s = import_ f []
-    where
-      f = eval (toHostString s)
+host :: Import f => String -> f
+host s = import_ f []
+  where
+    f = eval (toHostString s)
 \end{code}
 
 The foreign \lstinline!eval! import brings in the host language's evaluation
@@ -651,11 +663,11 @@ the one given in section \ref{sec:interface}.
   instance FromAny a => Import (IO a) where
     host = host'
   
-  foreign import ccall apply0 ::
+  foreign import stdcall apply0 ::
     HostFun -> IO HostAny
-  foreign import ccall apply1 ::
+  foreign import stdcall apply1 ::
     HostFun -> HostAny -> IO HostAny
-  foreign import ccall apply2 ::
+  foreign import stdcall apply2 ::
     HostFun -> HostAny -> HostAny -> IO HostAny
   ...
   
@@ -807,7 +819,7 @@ IO monad into a host language function which, when applied to $n$ host
 language arguments, calls $f$ with those same arguments and returns the $r$
 returned by $f$.\\
 \begin{code}
-  foreign import ccall hsfun_to_host
+  foreign import stdcall hsfun_to_host
     :: (HostAny -> ... -> HostAny) -> HostFun
 \end{code}\\
 But how can we make this operation type check?
@@ -827,7 +839,7 @@ alternative solution is presented.\\
   import Foreign.StablePtr
   import System.IO.Unsafe
 
-  foreign import ccall
+  foreign import stdcall
     hsfun_to_host' :: StablePtr a -> HostFun
 
   hsfun_to_host :: Exportable f => f -> IO HostFun
@@ -972,7 +984,7 @@ to make pure functions an instance of \lstinline!Exportable!.
   import Foreign.StablePtr
   import System.IO.Unsafe
 
-  foreign import ccall
+  foreign import stdcall
     hsfun_to_host' :: StablePtr a -> HostFun
 
   hsfun_to_host :: Exportable f => f -> IO HostFun
@@ -1414,7 +1426,7 @@ One common denominator is specialization: without exception, these
 implementations rely in large part on modifications to the compiler or
 language itself, in contrast to our interface which makes some sacrifices
 in order to be implementable as a library, maximizing portability across
-host and client languages alike.
+host and Haskell implementations alike.
 
 \paragraph{Idris: host-parametric FFI}
 \emph{Idris} is a dependently typed, Haskell-like language with backends for
