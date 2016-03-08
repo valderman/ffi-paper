@@ -295,7 +295,9 @@ The class of data fulfilling this criterion is embodied in an
 abstract \lstinline!HostAny! data type, inhabited by host-native
 representations of arbitrary Haskell values. Its representation is not fixed,
 but rather a reference to a value of any type representable in the underlying
-host language. Hence, the only parts of the library that can interact directly
+host language. From the Haskell point of view, its representation can be seen
+as a completely opaque reference.
+Hence, the only parts of the library that can interact directly
 with a \lstinline!HostAny! value are the ones explicitly imported through the
 vanilla FFI.
 A data type is considered to be marshallable if and only if it can be
@@ -409,8 +411,8 @@ most notably generics and default signatures -- in section
 
 \subsection{Implementing marshalling}\label{sec:marshalling}
 As usual in the functional world, we ought to start with the \emph{base case}:
-implementing marshalling for the basic primitive types that lie at the bottom
-of every data structure.
+implementing marshalling for the base types that lie at the bottom of every
+data structure.
 
 This is a simple proposition, as this is the forte of the vanilla foreign
 function interface.
@@ -422,6 +424,14 @@ foreign import stdcall anyToInt :: HostAny -> IO Int
 instance ToAny   Int where toAny   = intToAny
 instance FromAny Int where fromAny = anyToInt
 \end{code}
+
+The JavaScript implementation of these two functions are simply the identity
+function. As explained in section \ref{sec:interface}, \lstinline!HostAny! is
+simple an opaque reference to Haskell, but to JavaScript a reference is just
+another dynamically typed value. These functions are essentially a slightly
+roundabout way to coerce, rather than convert, base type values into
+\lstinline!HostAny! without having to know anything about the compiler's FFI
+implementation or internal representation of the base types.
 
 We might also find a \lstinline!HostAny! instance for \lstinline!ToAny!
 and \lstinline!FromAny! handy. Of course, \lstinline!HostAny! already being
@@ -437,13 +447,21 @@ no need to look any further than the vanilla foreign function interface.
 We must also provide some way of combining values into more complex values,
 to be able to represent lists, record types and other conveniences we take for
 granted in our day to day development work.
-But how should these values be combined? Depending on our host language, we
-may have different primitive data structures at our disposal.
+But how should these values be combined?
 
-Fortunately, JavaScript, as well as virtually any other
-language for which our interface is implementable as described in section
-\ref{sec:contrib}, support two basic aggregate types, which are sufficient to
-represent values of any type: arrays and dictionaries.
+Fortunately, JavaScript, supports two basic types, which are
+sufficient to represent values of any non-arrow type: arrays and dictionaries.
+
+Converting Haskell lists into arrays is a relatively straightforward affair.
+We need two functions: one to create a new, empty array, and one to push a
+new value onto the end of the array.\
+\footnote{JavaScript arrays are quite a different beast from ``actual'' arrays
+  as seen in C, making the push operation more efficient than one would normally
+  expect.
+}
+Converting arrays back into lists is similarly easy: we simply need to obtain
+the array's length, and read the requisite number of elements back into
+Haskell, building a list as we go along.
 
 For the sake of brevity, we assume that we have
 access to a pair of functions
@@ -474,21 +492,25 @@ making simple association lists a less heavyweight choice than a
 \lstinline!Map!.
 
 Note also the use of the generally unsafe \lstinline!unsafePerformIO!
-in \lstinline!mkDict!. The only side effects performed by
-\lstinline!mkDict! are to create a new reference, mutate it, and then
-return it, never to mutate it again. As the reference to the mutated object
-is not accessible outside \lstinline!mkDict! until after all mutation has
+in \lstinline!mkDict! and in the \lstinline!ToAny! instance for lists.
+The only side effects performed by said functions are to create a new
+references, mutate them, and then return them, never to mutate them again.
+As the references to the mutated objects
+are not accessible outside said functions until after all mutation has
 taken place, these side effects are not observable and this use of
 \lstinline!unsafePerformIO! can thus be considered safe.
 
 \begin{listingfloat}
 \begin{code}
-foreign import stdcall
-  newDict :: IO HostAny
+foreign import stdcall newDict :: IO HostAny
+foreign import stdcall newArr :: IO HostAny
+
 foreign import stdcall
   set :: HostAny -> HostString -> HostAny -> IO ()
 foreign import stdcall
   get :: HostAny -> HostString -> IO HostAny
+foreign import stdcall
+  push :: HostAny -> HostAny -> IO ()
 
 mkDict :: [(String, HostAny)] -> HostAny
 mkDict xs = unsafePerformIO $ do
@@ -496,11 +518,23 @@ mkDict xs = unsafePerformIO $ do
   mapM_ (\(k, v) -> set d (toHostString k) v) xs
   return d
 
+instance ToAny a => ToAny [a] where
+  toAny xs = unsafePerformIO $ do
+    arr <- newArray
+    mapM_ (push arr . toAny) xs
+    return arr
+
+instance FromAny a => FromAny [a] where
+  fromAny arr = do
+    len <- fromAny =<< get arr (toHostString "length")
+    sequence [ fromAny =<< get arr (toAny i)
+             | i <- [0..len-1 :: Int] ]
+
 getMember :: FromAny a => HostAny -> String -> IO a
 getMember dict key =
   get dict (toHostString key) >>= fromAny
 \end{code}
-\caption{Dictionary manipulation}
+\caption{Marshalling arrays and dictionaries}
 \label{lst:dicts}
 \end{listingfloat}
 
