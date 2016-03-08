@@ -334,7 +334,7 @@ instance ToAny Int
 instance FromAny Int
 ...
 instance Import f => FromAny f
-instance (FromAny a, Exportable b) => Marshal (a -> b)
+instance (FromAny a, Exportable b) => ToAny (a -> b)
 instance ToAny a => ToAny (IO a)
 
 host :: Import f => String -> f
@@ -347,16 +347,22 @@ These definitions give rise to a workflow for interacting with host
 language code:
 \begin{itemize}
 \item
-  define the appropriate \lstinline!Marshal! instances
+  define the appropriate \lstinline!ToAny! and \lstinline!FromAny! instances
   for any custom types, either automatically using the generic default instances
   as showcased by our motivating example in figure \ref{lst:good-ffi},
   or by defining them manually if a particular host language representation is
   desired; then
 \item
   import arbitrary host language symbols or expressions over
-  any set of types instantiating \lstinline!Marshal!,
+  any set of types instantiating \lstinline!ToAny! and \lstinline!FromAny!,
   using the \lstinline!host! function.
 \end{itemize}
+
+At first glance, it might seem strange to separate \lstinline!ToAny!
+and \lstinline!FromAny! instead of merging them into a single
+\lstinline!Marshal! class. The reason for this is that merging the two classes
+breaks marshalling of pure higher order functions in a rather subtle way, as
+discussed in section \ref{sec:extensions}.
 
 We let the classic ``hello, world'' example illustrate the import of simple
 host language functions using the interface described in figure
@@ -436,9 +442,9 @@ represent values of any type: arrays and dictionaries.
 
 For the sake of brevity, we assume that we have
 access to a pair of functions
-\lstinline!arrToList :: Marshal a => HostAny -> IO [a]!
-and \lstinline!listToArr :: Marshal a => [a] -> HostAny!
-which are used to implement the \lstinline!Marshal! instance for lists;
+\lstinline!arrToList :: ToAny a => HostAny -> IO [a]!
+and \lstinline!listToArr :: FromAny a => [a] -> HostAny!
+which are used to implement the marshalling instance for lists;
 they are trivial to implement either in Haskell using the vanilla foreign
 function interface to gradually build a list of \lstinline!HostAny! values,
 or on the host language side exploiting knowledge of the compiler's
