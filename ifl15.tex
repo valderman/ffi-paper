@@ -727,8 +727,9 @@ ought to occur almost exclusively on the top level of a module, is a quite
 unlikely proposition. Even so, it could be argued that if it is possible to use
 an interface for evil, its users almost certainly will at some point.
 
-Fortunately, the recent 7.10 release of the GHC compiler gives us the means to
-eliminate this potential pitfall. The \emph{StaticPointers} extension, its
+Fortunately, the recent 7.10 release of the GHC compiler, on which both Haste
+and GHCJS are based, gives us the means to eliminate this potential pitfall.
+The \emph{StaticPointers} extension, its
 first incarnation described in\ \cite{cloudhaskell}, introduces the
 \lstinline!static! keyword, which is used to create values of type
 \lstinline!StaticPtr! from closed expressions. Attempting to turn any
