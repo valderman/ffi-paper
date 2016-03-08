@@ -325,13 +325,9 @@ type HostAny
 
 class ToAny a where
   toAny :: a -> HostAny
-  default toAny :: (GToAny (Rep a), Generic a)
-                => a -> HostAny
 
 class FromAny a where
   fromAny :: HostAny -> IO a
-  default fromAny :: (GFromAny (Rep a), Generic a)
-                  => HostAny -> IO a
 
 class Import f
 instance (ToAny a, Import b) => Import (a -> b)
