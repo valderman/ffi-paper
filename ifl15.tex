@@ -293,9 +293,14 @@ sense?
 
 The class of data fulfilling this criterion is embodied in an
 abstract \lstinline!HostAny! data type, inhabited by host-native
-representations of arbitrary Haskell values.
-A data type is then considered to be marshallable if and only if it can be
-converted to \lstinline!HostAny! and back again.
+representations of arbitrary Haskell values. Its representation is not fixed,
+but rather a reference to a value of any type representable in the underlying
+host language. Hence, the only parts of the library that can interact directly
+with a \lstinline!HostAny! value are the ones explicitly imported through the
+vanilla FFI.
+A data type is considered to be marshallable if and only if it can be
+converted to \lstinline!HostAny! and back again using some such imported
+function or combination thereof.
 
 Having established the class of types that can be marshalled, we can now give
 a meaningful definition of \emph{importable} functions: a function can be
@@ -542,7 +547,8 @@ lest we run the risk of the value being changed in between the application
 of our marshalling function and the evaluation of the resulting thunk.
 
 \subsection{Importing functions}\label{sec:import}
-Implementing the \lstinline!host! function turns out to be slightly trickier
+Implementing the \lstinline!host! function -- the function by which JavaScript
+functions are imported into Haskell -- turns out to be slightly trickier
 than marshalling data between environments.
 The types of our imported functions need to differ depending on the arity of
 the imported host language code. This necessitates \lstinline!host! returning
@@ -1023,7 +1029,8 @@ instance ToAny a => ToAny (IO a) where
 Very rarely are users prepared to abandon person-decades of legacy code;
 to reach these users, the ability to expose Haskell functionality to the host
 language is important. Alas, being implemented as a library, our interface is
-not capable of \lstinline!foreign export! declarations. We can, however,
+not capable of \lstinline!foreign export! declarations -- the vanilla FFI's
+mechanism for making Haskell functions available to forein code. We can, however,
 implement a substitute on top of it.
 
 Rather than a writing a library which when compiled produces a shared library
