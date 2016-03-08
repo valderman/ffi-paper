@@ -429,6 +429,7 @@ another dynamically typed value. These functions are essentially a slightly
 roundabout way to coerce, rather than convert, base type values into
 \lstinline!HostAny! without having to know anything about the compiler's FFI
 implementation or internal representation of the base types.
+The same approach is used for the other base types.
 
 We might also find a \lstinline!HostAny! instance for \lstinline!ToAny!
 and \lstinline!FromAny! handy. Of course, \lstinline!HostAny! already being
