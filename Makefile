@@ -27,4 +27,4 @@ ifl15.zip: $(SOURCES)
 	zip -r ifl15 ifl15
 
 clean:
-	rm ifl15.log ifl15.aux *~
+	rm *.bbl *.aux ifl15.log

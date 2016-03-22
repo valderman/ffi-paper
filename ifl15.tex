@@ -292,7 +292,8 @@ Haskell dialect to interface with its JavaScript host environment at a high leve
 abstraction, and describe its implementation for the Haste compiler.
 The interface lets users import arbitrary JavaScript expressions in addition
 to the named functions traditionally importable through Haskell's FFI, exploiting
-JavaScript's built-in lambda abstraction for parameter interpolation in lieu of
+JavaScript's built-in lambda\newline
+abstraction for parameter interpolation in lieu of
 heavier and less portable solutions like anti-quotes.
 This enables users to create efficient bindings to foreign code with a potentially
 high impedance mismatch without having to pay with excessive boilerplate code.
@@ -315,7 +316,7 @@ concerns about our implementation, and show how these concerns can be
 alleviated by reaching outside the confines of Haskell '98.
 
 In section \ref{sec:extensions} we show the flexibility of our design by using
-it to implement marshalling of higher-order functions between the Haskell and
+it to implement marshalling of higher-order functions between Haskell and
 JavaScript, as well as a mechanism for automatically marshalling JavaScript
 exceptions into Haskell equivalents.
 We also discuss how to remove dynamic code evaluation from the equation
@@ -448,7 +449,7 @@ instance ToAny   Int where toAny   = intToAny
 instance FromAny Int where fromAny = anyToInt
 \end{code}
 
-The JavaScript implementation of these two functions are simply the identity
+The JavaScript implementation of these two functions is simply the identity
 function. As explained in section \ref{sec:interface}, \lstinline!HostAny! is
 simple an opaque reference to Haskell, but to JavaScript a reference is just
 another dynamically typed value. These functions are essentially a slightly
@@ -479,7 +480,7 @@ sufficient to represent values of any non-arrow type: arrays and dictionaries.
 Converting Haskell lists into arrays is a relatively straightforward affair.
 We need two functions: one to create a new, empty array, and one to push a
 new value onto the end of the array.%
-\footnote{JavaScript arrays are quite a different beast from ``actual'' arrays
+\footnote{A JavaScript array is quite a different beast from an ``actual'' array
   as seen in C, making the push operation more efficient than one would normally
   expect.
 }
@@ -566,10 +567,12 @@ dictionary operations.
 \begin{code}
 instance (ToAny a, ToAny b) =>
          ToAny (Either a b) where
-  toAny (Left a)  = mkDict [("tag",  toHostString "left"),
-                            ("data", toAny a)]
-  toAny (Right b) = mkDict [("tag",  toHostString "right"),
-                            ("data", toAny b)]
+  toAny (Left a)  = mkDict
+    [ ("tag",  toHostString "left")
+    , ("data", toAny a) ]
+  toAny (Right b) = mkDict
+    [ ("tag",  toHostString "right")
+    , ("data", toAny b) ]
 
 instance (FromAny a, FromAny b) =>
          FromAny (Either a b) where
@@ -582,7 +585,8 @@ instance (FromAny a, FromAny b) =>
 instance (ToAny a, ToAny b) => ToAny (a, b) where
   toAny (a, b) = toAny [toAny a, toAny b]
 
-instance (FromAny a, FromAny b) => FromAny (a, b) where
+instance (FromAny a, FromAny b) =>
+         FromAny (a, b) where
   fromAny x = do
     [a, b] <- fromAny x
     (,) <$> fromAny a <*> fromAny b
@@ -1024,7 +1028,9 @@ on pure functions, depending on the type of function being marshalled.
 
 Looking closer at the problematic \lstinline!ToAny! instance, we find that
 the \lstinline!Exportable t => ToAny t! instance provides
-\lstinline!ToAny! for any \lstinline!Exportable! type, and the
+\lstinline!ToAny! for any
+\linebreak
+\lstinline!Exportable! type, and the
 \lstinline!ToAny t => Exportable t! instance provides \lstinline!Exportable! in
 return, creating a loop which creates instances for both type classes
 matching any type.
@@ -1048,7 +1054,7 @@ necessary: the open type families originally introduced by Chakravarty et
 al\ \cite{typefamilies} do not admit the overlapping type equations required
 to make pure functions an instance of \lstinline!Exportable!.
 
-\begin{listingfloat}
+\begin{listingfloat}[H]
 \begin{code}
 import Foreign.StablePtr
 import System.IO.Unsafe
@@ -1117,7 +1123,9 @@ export =
 Returning to our motivating example with figure \ref{lst:good-ffi}, we note
 a conspicuous absence: the \lstinline!UTCTime! instance of \lstinline!FromAny!
 is not defined, yet it is still used by the \lstinline!host! function in the
-definition of \lstinline!getCurrentTime!. Although the instance can be defined
+definition of
+\linebreak
+\lstinline!getCurrentTime!. Although the instance can be defined
 in a single line of code, it would still be nice if we could avoid the tedium
 of writing that one line altogether. As stated in section
 \ref{sec:marshalling}, any non-arrow Haskell type can be represented using
@@ -1204,18 +1212,13 @@ It should be noted that this approach incurs a performance penalty due to the
 extra function call and marshalling required to dispatch a function, as further
 discussed in section \ref{sec:performance}.
 
-An interesting side-effect of this approach to exception handling and the fact
-that JavaScript syntax errors are catchable exceptions is that the
-exception-safe \lstinline!host! function is not only catch dynamic errors,
-but incorrectly written foreign imports as well.
-
 
 \section{Performance}
 \label{sec:performance}
 While increased performance is not a major motivation for this work, it is
 still important to ascertain that using our library does not entail a major
 performance hit. To determine the runtime performance of our interface
-vis a vis the vanilla FFI - a useful baseline for performance comparisons - we
+vis a vis the vanilla FFI -- a useful baseline for performance comparisons -- we
 have benchmarked a reference implementation of our interface against the
 vanilla FFI, both implemented for the Haste compiler.
 
@@ -1531,7 +1534,9 @@ host and Haskell implementations alike.
 \emph{Idris} is a dependently typed, Haskell-like language with backends for
 several host environments,\\
 JavaScript being one of them\ \cite{idris}.
-Like Haskell, Idris features monadic IO, but unlike Haskell, Idris' IO monad
+Like Haskell, Idris features
+\linebreak
+monadic IO, but unlike Haskell, Idris' IO monad
 \emph{is}, in a sense its foreign function interface.
 IO computations are constructed from primitive building blocks, imported using
 a function not unlike our \lstinline!host! function described in section
@@ -1673,7 +1678,9 @@ programs. It may thus be worthwhile to investigate the compromises needed
 to lift the garbage collection requirement from potential host environments.
 
 \paragraph{Conclusions}
-We have presented the design and implementation of a novel, portable foreign
+We have presented the design and implementation of a novel,
+\linebreak
+portable foreign
 function interface for web-targeting Haskell dialects. While designed for the
 web sphere, the given implementation is also applicable to a wide range of
 other high level target languages as well.
@@ -1699,7 +1706,7 @@ This work has been partially funded by the Swedish Foundation for Strategic Rese
 
 \section{References}
 \renewcommand\refname{}
-\bibliographystyle{abbrvnat}
+\bibliographystyle{abbrv}
 \bibliography{litterature}
 
 \end{document}
