@@ -20,7 +20,7 @@
 %-----------------------------------------------------------------------------
 
 
-\documentclass[preprint]{sigplanconf}
+\documentclass{sigplanconf}
 
 % The following \documentclass options may be useful:
 
@@ -29,7 +29,10 @@
 % 11pt          To set in 11-point type instead of 9-point.
 % authoryear    To obtain author/year citation style instead of numeric.
 
+\let\proof\relax
+\let\endproof\relax
 \usepackage{amsmath}
+\usepackage{times}
 \input{macros}
 
 \begin{document}
@@ -37,11 +40,17 @@
 \setlength{\pdfpageheight}{\paperheight}
 \setlength{\pdfpagewidth}{\paperwidth}
 
-\exclusivelicense
-\conferenceinfo{IFL~'15}{September 14--16, 2015, Koblenz, Germany} 
-\copyrightyear{2015}
-\copyrightdata{bogus}
-\doi{bogus}
+\CopyrightYear{2015} 
+\setcopyright{rightsretained} 
+\conferenceinfo{IFL '15}{September 14-16, 2015, Koblenz, Germany} 
+\isbn{978-1-4503-4273-5/15/09}
+\doi{http://dx.doi.org/10.1145/2897336.2897338}
+
+%\exclusivelicense
+%\conferenceinfo{IFL~'15}{September 14--16, 2015, Koblenz, Germany} 
+%\copyrightyear{2015}
+%\copyrightdata{bogus}
+%\doi{bogus}
 
 % Uncomment one of the following two, if you are not going for the 
 % traditional copyright transfer agreement.
@@ -51,15 +60,17 @@
                                   % (paid open-access papers, 
                                   % short abstracts)
 
-\titlebanner{-- IFL '15 draft submission --}        % These are ignored unless
-\preprintfooter{-- -- -- -- draft -- -- -- --}   % 'preprint' option specified.
+
+\numberofauthors{1}
+\author{
+  \alignauthor
+  Anton Ekblad
+  \affaddr{Chalmers University of Technology}
+  \email{antonek@chalmers.se}
+}
 
 \title{Foreign Exchange at Low, Low Rates}
 \subtitle{A lightweight FFI for web-targeting Haskell dialects}
-
-\authorinfo{Anton Ekblad}
-           {Chalmers University of Technology}
-           {antonek@chalmers.se}
 
 \maketitle
 
@@ -83,15 +94,40 @@
   implemented across a larger range of host environments and target languages.
 \end{abstract}
 
-\category{D.1.1}{Programming Techniques}{Applicative (functional) Programming}
-\category{D.2.11}{Software Architectures}{Languages}
-\category{D.2.12}{Interoperability}{Interface definition languages}
+%\category{D.1.1}{Programming Techniques}{Applicative (functional) Programming}
+%\category{D.2.11}{Software Architectures}{Languages}
+%\category{D.2.12}{Interoperability}{Interface definition languages}
+
+\begin{CCSXML}
+<ccs2012>
+<concept>
+<concept_id>10002951.10003260.10003282</concept_id>
+<concept_desc>Information systems~Web applications</concept_desc>
+<concept_significance>500</concept_significance>
+</concept>
+<concept>
+<concept_id>10011007.10011006.10011008.10011009.10011012</concept_id>
+<concept_desc>Software and its engineering~Functional languages</concept_desc>
+<concept_significance>500</concept_significance>
+</concept>
+<concept>
+<concept_id>10011007.10011006.10011041.10011048</concept_id>
+<concept_desc>Software and its engineering~Runtime environments</concept_desc>
+<concept_significance>300</concept_significance>
+</concept>
+</ccs2012>
+\end{CCSXML}
+
+\ccsdesc[500]{Information systems~Web applications}
+\ccsdesc[500]{Software and its engineering~Functional languages}
+\ccsdesc[300]{Software and its engineering~Runtime environments}
 
 % general terms are not compulsory anymore, 
 % you may leave them out
 %\terms
 %term1, term2
 %
+\printccsdesc
 \keywords
 compilers; interoperability; web
 
@@ -1658,106 +1694,12 @@ boilerplate code and complexity for users needing to interface their Haskell
 programs with their corresponding host environment in the space where it
 \emph{is} applicable: web-targeting Haskell implementations.
 
-\acks
+\section{Acknowledgements}
 This work has been partially funded by the Swedish Foundation for Strategic Research, under grant RAWFP. Many thanks to Koen Claessen, Emil Axelsson and Atze van der Ploeg for their valuable feedback and comments.
 
-% We recommend abbrvnat bibliography style.
-
+\section{References}
+\renewcommand\refname{}
 \bibliographystyle{abbrvnat}
-
-% The bibliography should be embedded for final submission.
-
-\begin{thebibliography}{}
-\softraggedright
-
-\bibitem[Augustsson, Massey (2013)]{printf}
-  Augustsson, Lennart, and Massey, Bart. The {\tt Text.Printf} module.
-  Available from \url{http://hackage.haskell.org/package/base-4.8.0.0/docs/Text-Printf.html},
-  2015-04-01.
-\bibitem[Balat, Chambart, Henry (2012)]{ocsigen}
-  Balat, Vincent, Chambart, Pierre, and Henry, Grégoire.
-  Client-server Web applications with Ocsigen.
-  In WWW2012, p. 59. 2012.
-\bibitem[Brady (2015)]{idris}
-  Brady, Edwin.
-  Cross-platform Compilers for Functional Languages.
-  Under consideration for Trends in Functional Programming, 2015.
-\bibitem[Chakravarty et al (2003)]{ffi}
-  Chakravarty, M. M. (Ed.). (2003).
-  The Haskell Foreign Function Interface 1.0: An Addendum to the Haskell 98
-  Report.
-\bibitem[Chakravarty (2014)]{language-c-inline}
-  Chakravarty, M. M. (2014, September).
-  Foreign inline code: systems demonstration.
-  In Proceedings of the 2014 ACM SIGPLAN symposium on Haskell (pp. 119-120).
-  ACM.
-\bibitem[Chakravarty, Keller, Peyton Jones (2005)]{typefamilies}
-  Chakravarty, M. M., Keller, G., \& Peyton Jones, S. (2005, September).
-  Associated type synonyms.
-  In ACM SIGPLAN Notices (Vol. 40, No. 9, pp. 241-253). ACM.
-\bibitem[Dijkstra, Stutterheim, Vermeulen, Swierstra (2013)]{uhc}
-  Dijkstra, A., Stutterheim, J., Vermeulen, A., \& Swierstra, S. D. (2013).
-  Building JavaScript applications with Haskell.
-  In Implementation and Application of Functional Languages (pp. 37-52).
-  Springer Berlin Heidelberg.
-\bibitem[Done (2015)]{fay}
-  Done, C.
-  Fay programming language.
-  Available from \url{http://fay-lang.org/}, 2015-05-15.
-\bibitem[The 2015 ECMAScript Language Specification, Rev. 38 (2015)]{es6}
-  The 2015 ECMAScript Language Specification, Rev. 38, Final Draft.
-  Available from \url{http://tinyurl.com/es6draft},
-  (2015-05-13).
-\bibitem[Eisenberg et al (2014)]{closedtypefamilies}
-  Eisenberg, R. A., Vytiniotis, D., Peyton Jones, S., \& Weirich, S. (2014).
-  Closed type families with overlapping equations.
-  ACM SIGPLAN Notices, 49(1), 671-683.
-\bibitem[Ekblad, Claessen (2014)]{haste}
-  Ekblad, A., \& Claessen, K. (2014, September).
-  A seamless, client-centric programming model for type safe web applications.
-  In Proceedings of the 2014 ACM SIGPLAN symposium on Haskell (pp. 79-89). ACM.
-\bibitem[Epstein, Black, Peyton Jones (2011)]{cloudhaskell}
-  Epstein, J., Black, A. P., \& Peyton Jones, S. (2011, September).
-  Towards Haskell in the cloud.
-  In ACM SIGPLAN Notices (Vol. 46, No. 12, pp. 118-129). ACM.
-\bibitem[Mainland (2007)]{quasiquotes}
-  Mainland, G. (2007, September).
-  Why it's nice to be quoted: quasiquoting for haskell.
-  In Proceedings of the ACM SIGPLAN workshop on Haskell workshop (pp. 73-82).
-  ACM.
-\bibitem[Magalhães, Dijkstra, Jeuring, Löh (2010)]{generics}
-  Magalhães, J. P., Dijkstra, A., Jeuring, J., \& Löh, A. (2010).
-  A generic deriving mechanism for Haskell.
-  In Haskell 2010, Baltimore, MD, USA, 30 September 2010, pages 37–48. ACM, 2010.
-\bibitem[Nazarov, Mackenzie, Stegeman (2015)]{ghcjs}
-  Nazarov, V., Mackenzie, H., \& Stegeman, L.
-  "GHCJS Haskell to JavaScript Compiler".
-  Available from \url{https://github.com/ghcjs/ghcjs}, (2014-05-14).
-\bibitem[O'Sullivan (2011)]{aeson}
-  O'Sullivan, B. (2011).
-  The {\tt aeson} package
-  Available from \url{http://hackage.haskell.org/package/aeson-0.11.1.0/}, (2016-02-29).
-\bibitem[Plasmeijer, van Eekelen (2002)]{clean}
-  Plasmeijer, R., \& van Eekelen, M.
-  "Clean language report version 2.1".
-\bibitem[Peyton Jones, Tolmach, Hoare (2001)]{rewriterules}
-  Jones Peyton, S., Tolmach, A., \& Hoare, T. (2001, September).
-  Playing by the rules: rewriting as a practical optimisation technique in GHC.
-  In Haskell workshop (Vol. 1, pp. 203-233).
-\bibitem[Reid (1994)]{stableptr}
-  Reid, A. (1994, September).
-  Malloc pointers and stable pointers: Improving Haskell's foreign language
-  interface.
-  In Glasgow Functional Programming Workshop Draft Proceedings, Ayr, Scotland.
-\bibitem[Sheard, Peyton Jones (2002)]{th}
-  Sheard, T., \& Jones, S. P. (2002, October).
-  Template meta-programming for Haskell.
-  In Proceedings of the 2002 ACM SIGPLAN workshop on Haskell (pp. 1-16). ACM.
-\bibitem[Yakeley, 2014]{time}
-  Yakeley, A.
-  The \emph{time} package.
-  Available from \url{http://hackage.haskell.org/package/time}, 2015-04-01.
-\end{thebibliography}
-
+\bibliography{litterature}
 
 \end{document}
